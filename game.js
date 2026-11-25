@@ -619,45 +619,259 @@ const GameEngine = {
     this.renderAll();
   },
 
-  setupEventListeners() {
-    // Tab switching
-    document.querySelectorAll(".nav-tab-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const tabId = btn.getAttribute("data-tab");
-        this.switchTab(tabId);
-      });
-    });
+  activeSphere: null,
+  activeSubtab: null,
 
+  setupEventListeners() {
     // Next Turn button
     document.getElementById("btn-end-turn").addEventListener("click", () => {
       this.advanceSeason();
     });
+  },
 
-    // Action planner sliders
-    const sliderL = document.getElementById("slider-action-primary");
-    const sliderS = document.getElementById("slider-action-secondary");
-    if (sliderL && sliderS) {
-      sliderL.addEventListener("input", () => this.updateActionProbabilityPreview());
-      sliderS.addEventListener("input", () => this.updateActionProbabilityPreview());
-    }
+  toggleInspector() {
+    const wrap = document.getElementById("map-inspector-wrapper");
+    const btn = document.getElementById("btn-toggle-inspector");
+    if (!wrap || !btn) return;
+    wrap.classList.toggle("collapsed");
+    btn.innerHTML = wrap.classList.contains("collapsed") ? "+" : "&#x2212;";
+  },
 
-    // Action executor
-    const btnExec = document.getElementById("btn-execute-action");
-    if (btnExec) {
-      btnExec.addEventListener("click", () => this.executeAction());
+  toggleSphereMenu(sphereKey) {
+    if (this.activeSphere === sphereKey) {
+      this.closeSphereMenu();
+    } else {
+      this.openSphereMenu(sphereKey);
     }
   },
 
-  switchTab(tabId) {
-    document.querySelectorAll(".nav-tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  openSphereMenu(sphereKey, subtab = null) {
+    const defaultSubtabs = {
+      leadership: "sovereign",
+      development: "pops",
+      military: "garrison",
+      culture: "spirits",
+      research: "tech",
+      commerce: "crafting"
+    };
 
-    const targetBtn = document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`);
-    const targetContent = document.getElementById(`tab-${tabId}`);
-    if (targetBtn && targetContent) {
-      targetBtn.classList.add("active");
-      targetContent.classList.add("active");
+    this.activeSphere = sphereKey;
+    this.activeSubtab = subtab || defaultSubtabs[sphereKey] || "main";
+
+    document.querySelectorAll(".sphere-dock-btn").forEach(b => {
+      b.classList.toggle("active", b.getAttribute("data-sphere") === sphereKey);
+    });
+
+    const drawer = document.getElementById("sphere-embedded-drawer");
+    if (drawer) {
+      drawer.style.borderTopColor = `var(--sphere-${sphereKey})`;
+      drawer.classList.add("open");
     }
+
+    this.renderActiveSphereDrawer();
+  },
+
+  closeSphereMenu() {
+    this.activeSphere = null;
+    document.querySelectorAll(".sphere-dock-btn").forEach(b => b.classList.remove("active"));
+    const drawer = document.getElementById("sphere-embedded-drawer");
+    if (drawer) drawer.classList.remove("open");
+  },
+
+  setSubtab(subtabId) {
+    this.activeSubtab = subtabId;
+    this.renderActiveSphereDrawer();
+  },
+
+  // --- NEW EMBEDDED SPHERE ACTIONS ---
+  hostCouncilFeast() {
+    const s = this.state;
+    const totalFood = s.resources.foodPerishable + s.resources.foodPreserved;
+    if (s.spheres.leadership.current < 1 || totalFood < 25) {
+      alert("Need 1 Leadership energy and 25 Food to host a tribal feast.");
+      return;
+    }
+    s.spheres.leadership.current -= 1;
+    if (s.resources.foodPerishable >= 25) s.resources.foodPerishable -= 25;
+    else {
+      const rem = 25 - s.resources.foodPerishable;
+      s.resources.foodPerishable = 0;
+      s.resources.foodPreserved -= rem;
+    }
+    s.factions.forEach(f => f.opinion = Math.min(100, f.opinion + 8));
+    s.telemetry.tension = Math.max(0, s.telemetry.tension - 10);
+    this.log("Council Feast Held: All factions gained +8 Opinion and tribal Tension dropped by 10%.", "log-positive");
+    this.renderAll();
+  },
+
+  codifyPeaceAccord() {
+    const s = this.state;
+    if (s.spheres.leadership.current < 2) {
+      alert("Need 2 Leadership energy to decree a tribal Peace Accord.");
+      return;
+    }
+    s.spheres.leadership.current -= 2;
+    s.telemetry.tension = Math.max(0, s.telemetry.tension - 15);
+    this.log("Law Decreed: Chieftain Kiwele enforced the Accord of the Hearth (-15% Tension).", "log-positive");
+    this.renderAll();
+  },
+
+  reassignPop(popId, newWorkplace) {
+    const pop = this.state.pops.find(p => p.id === popId);
+    if (!pop) return;
+    pop.workplace = newWorkplace;
+    this.log(`Reassigned ${pop.name} to ${newWorkplace}.`);
+    this.renderAll();
+  },
+
+  slaughterHerd(herdId, count = 2) {
+    const s = this.state;
+    const herd = s.herds.find(h => h.id === herdId);
+    if (!herd || herd.count <= count) {
+      alert("Cannot slaughter below breeding minimum!");
+      return;
+    }
+    herd.count -= count;
+    const meat = count * (herd.slaughterMeat || 20);
+    const hides = count * (herd.slaughterHide || 4);
+    s.resources.foodPerishable += meat;
+    s.resources.hides += hides;
+    this.log(`Butchered ${count} ${herd.species}, yielding +${meat} Fresh Food and +${hides} Hides.`, "log-positive");
+    this.renderAll();
+  },
+
+  tameWildGoats() {
+    const s = this.state;
+    if (s.spheres.development.current < 2) {
+      alert("Need 2 Development energy to corral wild goats.");
+      return;
+    }
+    s.spheres.development.current -= 2;
+    s.herds[0].count += 3;
+    this.log("Pastoral Expansion: Corralled 3 wild horned goats into the tribe's herd.", "log-positive");
+    this.renderAll();
+  },
+
+  trainSpearmen() {
+    const s = this.state;
+    if (s.spheres.military.current < 1 || s.resources.materials < 10 || s.resources.wood < 12) {
+      alert("Need 1 Military energy, 10 Materials, and 12 Wood to outfit a spear regiment.");
+      return;
+    }
+    s.spheres.military.current -= 1;
+    s.resources.materials -= 10;
+    s.resources.wood -= 12;
+    s.military.push({
+      id: `unit_${s.military.length + 1}`,
+      name: `River Spearmen #${s.military.length + 1}`,
+      type: "Infantry",
+      weapon: "Flint Spears",
+      armor: "Hide Shield",
+      power: 14,
+      health: 100,
+      counter: ["Swords", "Cavalry"],
+      maintenance: 2
+    });
+    s.factions[0].opinion = Math.min(100, s.factions[0].opinion + 10);
+    this.log("Regiment Mobilized: Trained new River Spearmen (+10 Spear Warriors Opinion).", "log-positive");
+    this.renderAll();
+  },
+
+  fortifyCamp() {
+    const s = this.state;
+    if (s.spheres.military.current < 1 || s.resources.wood < 15) {
+      alert("Need 1 Military energy and 15 Wood to raise palisade defenses.");
+      return;
+    }
+    s.spheres.military.current -= 1;
+    s.resources.wood -= 15;
+    const cap = s.locations[0];
+    if (cap) {
+      cap.buildings.push({
+        id: `bld_wall_${cap.buildings.length}`,
+        name: "Timber Palisade",
+        type: "Defense",
+        capacity: 15,
+        effect: "Protects pops and reduces enemy raid casualties by 25%."
+      });
+    }
+    s.telemetry.tension = Math.max(0, s.telemetry.tension - 5);
+    this.log("Defenses Constructed: Raised Timber Palisades around Janas Valley.", "log-positive");
+    this.renderAll();
+  },
+
+  offerFoodSacrifice() {
+    const s = this.state;
+    if (s.spheres.culture.current < 1 || s.resources.foodPerishable < 20) {
+      alert("Need 1 Culture energy and 20 Fresh Food to offer a river sacrifice.");
+      return;
+    }
+    s.spheres.culture.current -= 1;
+    s.resources.foodPerishable -= 20;
+    s.spirits[0].favor = Math.min(100, s.spirits[0].favor + 15);
+    s.magic.pools.water = Math.min(s.magic.capacities.water, s.magic.pools.water + 12);
+    s.telemetry.entropy = Math.max(0, s.telemetry.entropy - 5);
+    s.factions[1].opinion = Math.min(100, s.factions[1].opinion + 10);
+    this.log("Sacred Offering: Oshun accepted 20 food (+15% Favor, +12 Water Mana, +10 Shamans Opinion).", "log-divine");
+    this.renderAll();
+  },
+
+  castSpell(spellId) {
+    const s = this.state;
+    const spell = s.spells.find(sp => sp.id === spellId);
+    if (!spell) return;
+    if ((s.magic.pools[spell.manaType] || 0) < spell.cost) {
+      alert(`Insufficient ${spell.manaType} mana (Need ${spell.cost}).`);
+      return;
+    }
+    s.magic.pools[spell.manaType] -= spell.cost;
+    s.telemetry.entropy = Math.min(100, s.telemetry.entropy + 6);
+
+    if (spellId === "spell_rain") {
+      s.cropField.accumulatedYield = Math.min(s.cropField.maxYield, s.cropField.accumulatedYield + 75);
+      s.weather.moisture = Math.min(100, s.weather.moisture + 20);
+      this.log("SPELL CAST: Drying Rain Invocation! Sorghum yield surged by +75.", "log-divine");
+    } else if (spellId === "spell_fertility") {
+      s.herds[0].count += 2;
+      s.demographicGrowthPool += 0.25;
+      this.log("SPELL CAST: Earth Mother's Bloom! Herds grew by +2 and demographic growth surged +25%.", "log-divine");
+    } else if (spellId === "spell_ward") {
+      s.telemetry.tension = Math.max(0, s.telemetry.tension - 10);
+      s.pops.forEach(p => p.health = Math.min(100, p.health + 15));
+      this.log("SPELL CAST: Ward of the Smoldering Hearth! Tribal health restored and Tension eased.", "log-divine");
+    }
+    this.renderAll();
+  },
+
+  preserveFoodWithPottery() {
+    const s = this.state;
+    if (s.resources.pottery < 1 || s.resources.foodPerishable < 10) {
+      alert("Need at least 1 Pottery Jar and 10 Fresh Food to seal rations.");
+      return;
+    }
+    s.resources.pottery -= 1;
+    s.resources.foodPerishable -= 10;
+    s.resources.foodPreserved += 10;
+    this.log("Food Preserved: Sealed 10 Fresh Food inside a clay jar against spoilage.", "log-positive");
+    this.renderAll();
+  },
+
+  focusNearestFrontier() {
+    const w = this.state.world;
+    if (!w) return;
+    const frontier = w.cells.find(c => !c.explored && c.neighbors.some(nid => w.cells[nid].explored));
+    if (!frontier) {
+      alert("All reachable frontier cells are already explored!");
+      return;
+    }
+    MapRenderer.selectCell(frontier.id);
+    MapRenderer.centerOnCell(frontier.id, 1.8);
+    this.closeSphereMenu();
+  },
+
+  focusCellOnMap(cellId) {
+    MapRenderer.selectCell(cellId);
+    MapRenderer.centerOnCell(cellId, 2.0);
   },
 
   log(msg, type = "") {
@@ -1198,23 +1412,23 @@ const GameEngine = {
   },
 
   // -------------------------------------------------------------
-  // RENDERING ENGINE
+  // RENDERING ENGINE (MAP-FIRST + EMBEDDED SPHERE DRAWERS)
   // -------------------------------------------------------------
   renderAll() {
     this.renderTopBar();
     this.renderResourceStrip();
-    this.renderOverviewTab();
-    this.renderTerritoryTab();
-    this.renderPopulationTab();
-    this.renderAgrarianTab();
-    this.renderFactionsTab();
-    this.renderTechTab();
-    this.renderMilitaryTab();
-    this.renderSpiritsTab();
-    this.renderMagicTab();
+    this.renderSphereDock();
     this.renderChronicle();
+
+    const claimedCount = this.state.locations.length;
+    const mapCmdEl = document.getElementById("ui-map-command-limit");
+    if (mapCmdEl) mapCmdEl.innerText = `Claimed: ${claimedCount} / ${this.state.commandLimit}`;
+
     if (MapRenderer && MapRenderer.selectedCellId !== null && this.state.world) {
       this.onMapCellSelected(MapRenderer.selectedCellId);
+    }
+    if (this.activeSphere) {
+      this.renderActiveSphereDrawer();
     }
   },
 
@@ -1232,7 +1446,6 @@ const GameEngine = {
     document.getElementById("ui-temp-val").innerText = `${s.weather.temperature}°C`;
     document.getElementById("ui-weather-cond").innerText = s.weather.condition;
 
-    // Telemetry Gauges
     const tensionFill = document.getElementById("gauge-tension-fill");
     tensionFill.style.width = `${s.telemetry.tension}%`;
     tensionFill.style.backgroundColor = s.telemetry.tension > 60 ? "var(--accent-red)" : "var(--accent-gold)";
@@ -1251,282 +1464,455 @@ const GameEngine = {
     document.getElementById("res-water").innerText = Math.round(r.water);
     document.getElementById("res-wood").innerText = r.wood;
     document.getElementById("res-materials").innerText = r.materials;
+    const fibEl = document.getElementById("res-fibers");
+    if (fibEl) fibEl.innerText = r.fibers;
     document.getElementById("res-pottery").innerText = r.pottery;
   },
 
-  renderOverviewTab() {
+  renderSphereDock() {
     const s = this.state;
-    // Render sphere cards
-    const sphereContainer = document.getElementById("sphere-cards-container");
-    sphereContainer.innerHTML = "";
     for (const [key, sp] of Object.entries(s.spheres)) {
-      const card = document.createElement("div");
-      card.className = `card sphere-card sphere-${key}`;
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title">${sp.label}</span>
-          <span class="chip chip-gold">Base: ${sp.base}</span>
-        </div>
-        <div class="sphere-power-val">${sp.current}</div>
-        <div class="sphere-sub">Current Seasonal Potential</div>
+      const el = document.getElementById(`dock-val-${key}`);
+      if (el) el.innerText = sp.current;
+    }
+  },
+
+  renderActiveSphereDrawer() {
+    const s = this.state;
+    const key = this.activeSphere;
+    if (!key) return;
+
+    const meta = {
+      leadership: { icon: "&#x1F451;", title: "Leadership Sphere — Sovereign & Council", factionId: null, subtabs: [
+        { id: "sovereign", label: "Dynasty & Blood" },
+        { id: "council", label: "All Factions" },
+        { id: "planner", label: "Action Planner" },
+        { id: "chronicle", label: "Full Chronicle" }
+      ]},
+      development: { icon: "&#x1F331;", title: "Development Sphere — Pops, Land & Herds", factionId: "fac_harvesters", subtabs: [
+        { id: "pops", label: "Pops & Labor" },
+        { id: "agrarian", label: "Crops & Herds" },
+        { id: "territory", label: "Claimed Cells" }
+      ]},
+      military: { icon: "&#x2694;", title: "Military Sphere — Garrison & War", factionId: "fac_warriors", subtabs: [
+        { id: "garrison", label: "Units & Tactics" }
+      ]},
+      culture: { icon: "&#x2728;", title: "Culture Sphere — Spirits & Magic", factionId: "fac_shamans", subtabs: [
+        { id: "spirits", label: "Spirits & Taboos" },
+        { id: "magic", label: "8 Manas & Spells" }
+      ]},
+      research: { icon: "&#x1F52C;", title: "Research Sphere — Tech & Discovery", factionId: "fac_elders", subtabs: [
+        { id: "tech", label: "Technology Tree" }
+      ]},
+      commerce: { icon: "&#x2696;", title: "Commerce Sphere — Crafting & Stockpiles", factionId: "fac_traders", subtabs: [
+        { id: "crafting", label: "Workshop Crafting" },
+        { id: "stockpiles", label: "Stockpiles & Jars" }
+      ]}
+    }[key];
+
+    document.getElementById("drawer-sphere-icon").innerHTML = meta.icon;
+    document.getElementById("drawer-sphere-title").innerText = meta.title;
+    document.getElementById("drawer-sphere-energy").innerText = `Energy: ${s.spheres[key].current} (Base ${s.spheres[key].base})`;
+
+    // Aligned Faction Banner
+    const banner = document.getElementById("drawer-faction-banner");
+    if (meta.factionId) {
+      const fac = s.factions.find(f => f.id === meta.factionId);
+      const opColor = fac.opinion >= 60 ? "chip-green" : fac.opinion >= 40 ? "chip-gold" : "chip-red";
+      banner.innerHTML = `
+        <div><strong>Aligned Faction:</strong> ${fac.name} <span class="chip ${opColor}">Opinion: ${fac.opinion}%</span></div>
+        <div style="color:var(--text-muted);"><strong>Demand:</strong> ${fac.activeDemand}</div>
       `;
-      sphereContainer.appendChild(card);
+    } else {
+      banner.innerHTML = `
+        <div><strong>Sovereign Authority:</strong> ${s.leader.name} • Command Limit: <strong>${s.locations.length} / ${s.commandLimit}</strong></div>
+        <div style="color:var(--text-muted);">Bloodline: <strong>${s.tribe.bloodline}</strong></div>
+      `;
     }
 
-    this.updateActionProbabilityPreview();
+    // Subtabs bar
+    const subtabsEl = document.getElementById("drawer-subtabs");
+    subtabsEl.innerHTML = meta.subtabs.map(st => `
+      <button class="subtab-btn ${this.activeSubtab === st.id ? 'active' : ''}" onclick="GameEngine.setSubtab('${st.id}')">
+        ${st.label}
+      </button>
+    `).join("");
+
+    // Render body content for active sphere + subtab
+    const bodyEl = document.getElementById("drawer-body");
+    bodyEl.innerHTML = this.buildSphereDrawerBody(key, this.activeSubtab);
+
+    if (key === "leadership" && this.activeSubtab === "planner") {
+      const sliderL = document.getElementById("slider-action-primary");
+      const sliderS = document.getElementById("slider-action-secondary");
+      if (sliderL && sliderS) {
+        sliderL.addEventListener("input", () => this.updateActionProbabilityPreview());
+        sliderS.addEventListener("input", () => this.updateActionProbabilityPreview());
+        this.updateActionProbabilityPreview();
+      }
+    }
   },
 
-  renderTerritoryTab() {
+  buildSphereDrawerBody(sphereKey, subtab) {
     const s = this.state;
-    const claimedCount = s.locations.length;
-    const mapCmdEl = document.getElementById("ui-map-command-limit");
-    if (mapCmdEl) mapCmdEl.innerText = `Claimed: ${claimedCount} / ${s.commandLimit}`;
-    const terrCmdEl = document.getElementById("ui-territory-cmd");
-    if (terrCmdEl) terrCmdEl.innerText = `${claimedCount} / ${s.commandLimit}`;
 
-    const cardsContainer = document.getElementById("claimed-locations-cards");
-    if (cardsContainer) {
-      cardsContainer.innerHTML = "";
-      s.locations.forEach(loc => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = `
-          <div class="card-header">
-            <span class="card-title">${loc.name}</span>
-            <span class="chip chip-gold">${loc.terrain}${loc.riverBonus ? " (River 2x)" : ""}</span>
+    // 1. LEADERSHIP
+    if (sphereKey === "leadership") {
+      if (subtab === "sovereign") {
+        return `
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header"><span class="card-title">&#x1F451; Ruler & Dynasty</span><span class="chip chip-gold">Age ${s.leader.age}</span></div>
+              <div style="font-size:12px; display:flex; flex-direction:column; gap:5px;">
+                <div><strong>Leader:</strong> ${s.leader.name} (${s.leader.dynasty})</div>
+                <div><strong>Successor:</strong> ${s.leader.successor}</div>
+                <div><strong>Strength:</strong> <span style="color:var(--accent-green);">${s.leader.strength}</span></div>
+                <div><strong>Weakness:</strong> <span style="color:var(--accent-red);">${s.leader.weakness}</span></div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:10px;">
+                <button class="btn btn-primary" onclick="GameEngine.hostCouncilFeast()">&#x1F377; Host Feast (1 Lead, 25 Food)</button>
+                <button class="btn" onclick="GameEngine.codifyPeaceAccord()">&#x1F4DC; Peace Accord (2 Lead)</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">&#x1F9EC; Bloodline: ${s.tribe.bloodline}</span></div>
+              <div style="font-size:12px; margin-bottom:6px;">
+                <strong>Genetic Boons:</strong><br>
+                ${s.tribe.boons.map(b => `<span class="chip chip-green" style="margin:2px 2px 0 0;">${b}</span>`).join("")}
+              </div>
+              <div style="font-size:12px; margin-bottom:6px;">
+                <strong>Genetic Curses:</strong><br>
+                ${s.tribe.curses.map(c => `<span class="chip chip-red" style="margin:2px 2px 0 0;">${c}</span>`).join("")}
+              </div>
+              <div style="font-size:11px; color:var(--text-muted);">Features: ${s.tribe.features.join(", ")}</div>
+            </div>
           </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:13px;">
-            <div>Space Capacity: <strong>${loc.spaceUsed} / ${loc.spaceMax}</strong></div>
-            <div>Fertility: <strong>${loc.fertilityFieldsMax} Fields | ${loc.fertilityPasturesMax} Pastures</strong></div>
-          </div>
-          <button class="btn" onclick="GameEngine.switchTab('map'); MapRenderer.selectCell(${loc.cellId}); MapRenderer.centerOnCell(${loc.cellId}, 2.0);">
-            View on World Map
-          </button>
         `;
-        cardsContainer.appendChild(card);
-      });
+      }
+      if (subtab === "council") {
+        return `
+          <div class="grid-2">
+            ${s.factions.map(fac => `
+              <div class="card">
+                <div class="card-header">
+                  <span class="card-title">${fac.name}</span>
+                  <span class="chip ${fac.opinion >= 60 ? 'chip-green' : fac.opinion >= 40 ? 'chip-gold' : 'chip-red'}">Opinion: ${fac.opinion}%</span>
+                </div>
+                <div style="font-size:11px; margin-bottom:5px;">
+                  <strong>Sphere:</strong> <span class="chip chip-blue" style="text-transform:capitalize;">${fac.sphere}</span>
+                </div>
+                <div style="font-size:11px; background:var(--bg-tertiary); padding:7px; border-radius:5px; margin-bottom:5px; border-left:2px solid var(--accent-gold);">
+                  <strong>Demand:</strong> ${fac.activeDemand}
+                </div>
+                <div style="font-size:10px; color:var(--text-muted);"><em>${fac.penalty}</em></div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+      if (subtab === "planner") {
+        return `
+          <div class="action-box">
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+              Commit Development + Leadership energy to execute tribal expeditions with continuous logistic probability modeling.
+            </p>
+            <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px;">
+              <div style="flex:1; min-width:190px;">
+                <label style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Action Objective</label>
+                <select id="select-action-type" style="width:100%; padding:6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:6px;" onchange="GameEngine.updateActionProbabilityPreview()">
+                  <option value="explore">Explore Outer Frontier (+Materials/Fibers)</option>
+                  <option value="clear_pasture">Clear & Fence Pasture (+1 Pasture Slot, +20 Wood)</option>
+                  <option value="commune_spirits">Commune with River Spirit (+Favor & Mana)</option>
+                  <option value="tame_beasts">Trap Wild Horned Goats (+3 Herd)</option>
+                  <option value="codify_law">Codify Tribal Peace Accord (-12% Tension)</option>
+                </select>
+              </div>
+              <div style="flex:1; min-width:140px;">
+                <label style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Development (<span id="val-action-primary">3</span>)</label>
+                <div class="slider-group"><input id="slider-action-primary" type="range" min="0" max="6" value="3"></div>
+              </div>
+              <div style="flex:1; min-width:140px;">
+                <label style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Leadership (<span id="val-action-secondary">2</span>)</label>
+                <div class="slider-group"><input id="slider-action-secondary" type="range" min="0" max="4" value="2"></div>
+              </div>
+            </div>
+            <div class="probability-meter">
+              <div>
+                <div style="font-size:10px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Success Probability (&sigma; = 0.15)</div>
+              </div>
+              <div class="prob-val" id="action-prob-val">70%</div>
+              <button class="btn btn-primary" onclick="GameEngine.executeAction()">Execute Project</button>
+            </div>
+          </div>
+        `;
+      }
+      if (subtab === "chronicle") {
+        return `
+          <div class="log-stream">
+            ${s.chronicle.map(item => `
+              <div class="log-entry ${item.type || ""}">
+                <div class="log-timestamp">${item.season}, Year ${item.year}</div>
+                <div>${item.text}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
     }
 
-    const siteTableBody = document.querySelector("#table-sites tbody");
-    siteTableBody.innerHTML = "";
-    s.locations.forEach(loc => {
-      loc.sites.forEach(st => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><strong>${loc.name}</strong></td>
-          <td>${st.name}</td>
-          <td>${st.type}</td>
-          <td>${st.yieldAmount} ${st.yieldType}/worker</td>
-          <td>${st.extractionCap}/season</td>
-          <td>
-            <span class="chip chip-green">${st.assignedPops} Pops (~${st.assignedPops * 100})</span>
-          </td>
-        `;
-        siteTableBody.appendChild(tr);
-      });
-    });
-
-    const bldTableBody = document.querySelector("#table-buildings tbody");
-    bldTableBody.innerHTML = "";
-    s.locations.forEach(loc => {
-      loc.buildings.forEach(b => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><strong>${b.name}</strong> <span class="text-muted">(${loc.name})</span></td>
-          <td>${b.type}</td>
-          <td>${b.capacity || "-"}</td>
-          <td><span class="text-muted">${b.effect}</span></td>
-        `;
-        bldTableBody.appendChild(tr);
-      });
-    });
-  },
-
-  renderPopulationTab() {
-    const s = this.state;
-    document.getElementById("ui-pop-total").innerText = `${s.pops.length} Cohorts (~${s.pops.length * 100} souls)`;
-    document.getElementById("ui-pop-growth-pct").innerText = `${Math.round(s.demographicGrowthPool * 100)}%`;
-
-    const popTableBody = document.querySelector("#table-pops tbody");
-    popTableBody.innerHTML = "";
-    s.pops.forEach(p => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><strong>${p.name}</strong></td>
-        <td><span class="chip chip-blue">${p.blood}</span></td>
-        <td>${p.faction}</td>
-        <td>${p.workplace}</td>
-        <td><span class="chip ${p.housing === "Hut" ? "chip-green" : "chip-red"}">${p.housing}</span></td>
-        <td>${p.tools.length ? p.tools.join(", ") : "None"}</td>
-        <td>
-          <div style="font-weight:600; color:${p.health >= 80 ? 'var(--accent-green)' : 'var(--accent-red)'}">
-            ${p.health}%
+    // 2. DEVELOPMENT
+    if (sphereKey === "development") {
+      if (subtab === "pops") {
+        const siteChoices = ["River Fishery", "Hardwood Grove", "River Clay Bank", "Crop Field", "Basic Workshop"];
+        return `
+          <div class="grid-2" style="margin-bottom:10px;">
+            <div class="card">
+              <div class="card-title">&#x1F465; Total Population: ${s.pops.length} Cohorts (~${s.pops.length * 100} souls)</div>
+            </div>
+            <div class="card">
+              <div class="card-title" style="color:var(--accent-green);">&#x1F331; Growth Progress: ${Math.round(s.demographicGrowthPool * 100)}% toward next Pop</div>
+            </div>
           </div>
-        </td>
-      `;
-      popTableBody.appendChild(tr);
-    });
-  },
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr><th>Cohort</th><th>Faction</th><th>Workplace</th><th>Housing</th><th>Tools</th><th>Health</th></tr>
+              </thead>
+              <tbody>
+                ${s.pops.map(p => `
+                  <tr>
+                    <td><strong>${p.name}</strong></td>
+                    <td>${p.faction}</td>
+                    <td>
+                      <select style="background:var(--bg-tertiary); color:#fff; border:1px solid var(--border-color); border-radius:4px; padding:2px 5px; font-size:11px;" onchange="GameEngine.reassignPop('${p.id}', this.value)">
+                        ${siteChoices.map(sc => `<option value="${sc}" ${p.workplace === sc ? "selected" : ""}>${sc}</option>`).join("")}
+                      </select>
+                    </td>
+                    <td><span class="chip ${p.housing === 'Hut' ? 'chip-green' : 'chip-red'}">${p.housing}</span></td>
+                    <td>${p.tools.length ? p.tools.join(", ") : "None"}</td>
+                    <td><strong style="color:${p.health >= 80 ? 'var(--accent-green)' : 'var(--accent-red)'}">${p.health}%</strong></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+      if (subtab === "agrarian") {
+        const c = s.cropField;
+        const h = s.herds[0];
+        return `
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header"><span class="card-title">&#x1F33E; ${c.cropName}</span><span class="chip chip-gold">Harvest: ${s.seasons[c.harvestSeason]}</span></div>
+              <div style="font-size:12px; margin-bottom:8px;">Yield: <strong>${Math.round(c.accumulatedYield)} / ${c.maxYield}</strong></div>
+              <div class="gauge-bar-bg" style="height:8px; margin-bottom:8px;">
+                <div class="gauge-fill" style="width:${(c.accumulatedYield / c.maxYield) * 100}%; background:var(--accent-gold);"></div>
+              </div>
+              <p style="font-size:11px; color:var(--text-muted);">Farmers add +${c.growthRatePerFarmer} yield/season and reap automatically in Autumn.</p>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">&#x1F410; ${h.species}</span><span class="chip chip-green">${h.count} Animals</span></div>
+              <div style="font-size:12px; margin-bottom:8px;">Dairy Output: <strong>+${Math.round(h.count * 1.8)} food/season</strong></div>
+              <p style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Traits: <em>${h.traits.join(", ")}</em>. Breeds every Spring.</p>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-primary" onclick="GameEngine.tameWildGoats()">Tame Wild (+3, 2 Dev)</button>
+                <button class="btn btn-danger" onclick="GameEngine.slaughterHerd('${h.id}', 2)">Slaughter 2 (+40 Food)</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      if (subtab === "territory") {
+        return `
+          <div class="grid-2">
+            ${s.locations.map(loc => `
+              <div class="card">
+                <div class="card-header">
+                  <span class="card-title">${loc.name}</span>
+                  <span class="chip chip-gold">${loc.terrain}${loc.riverBonus ? " (River 2x)" : ""}</span>
+                </div>
+                <div style="font-size:12px; margin-bottom:8px;">
+                  Space: <strong>${loc.spaceUsed}/${loc.spaceMax}</strong> • Fertility: <strong>${loc.fertilityFieldsMax}F / ${loc.fertilityPasturesMax}P</strong>
+                </div>
+                <button class="btn" onclick="GameEngine.focusCellOnMap(${loc.cellId})">&#x2316; Center on Map</button>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+    }
 
-  renderAgrarianTab() {
-    const s = this.state;
-    const c = s.cropField;
-    document.getElementById("ui-crop-name").innerText = c.cropName;
-    document.getElementById("ui-crop-yield").innerText = `${Math.round(c.accumulatedYield)} / ${c.maxYield}`;
-    document.getElementById("ui-crop-harvest-season").innerText = s.seasons[c.harvestSeason];
-
-    const herd = s.herds[0];
-    document.getElementById("ui-herd-species").innerText = herd.species;
-    document.getElementById("ui-herd-count").innerText = `${herd.count} Animals`;
-    document.getElementById("ui-herd-milk").innerText = `+${Math.round(herd.count * 1.8)} food/season`;
-  },
-
-  renderFactionsTab() {
-    const s = this.state;
-    const container = document.getElementById("factions-list-container");
-    container.innerHTML = "";
-    s.factions.forEach(fac => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title">${fac.name}</span>
-          <span class="chip ${fac.opinion >= 60 ? 'chip-green' : fac.opinion >= 40 ? 'chip-gold' : 'chip-red'}">
-            Opinion: ${fac.opinion}%
-          </span>
+    // 3. MILITARY
+    if (sphereKey === "military") {
+      return `
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <button class="btn btn-primary" onclick="GameEngine.trainSpearmen()">&#x2694; Train Spearmen (1 Mil, 10 Mat, 12 Wood)</button>
+          <button class="btn" onclick="GameEngine.fortifyCamp()">&#x1F6E1; Raise Palisade (1 Mil, 15 Wood)</button>
         </div>
-        <div style="font-size:12px; margin-bottom:8px;">
-          <strong>Sphere Alignment:</strong> <span class="chip chip-blue" style="text-transform:capitalize;">${fac.sphere}</span>
-        </div>
-        <div style="font-size:12px; background:var(--bg-tertiary); padding:10px; border-radius:6px; margin-bottom:8px; border-left:3px solid var(--accent-gold);">
-          <strong>Active Demand:</strong> ${fac.activeDemand}
+        <div class="table-container" style="margin-bottom:10px;">
+          <table class="data-table">
+            <thead><tr><th>Unit Regiment</th><th>Class</th><th>Power</th><th>Health</th><th>Loadout</th><th>Tactical Counters</th></tr></thead>
+            <tbody>
+              ${s.military.map(u => `
+                <tr>
+                  <td><strong>${u.name}</strong></td>
+                  <td>${u.type}</td>
+                  <td><strong style="color:var(--accent-red);">${u.power}</strong></td>
+                  <td>${u.health}%</td>
+                  <td>${u.weapon} / ${u.armor}</td>
+                  <td><span class="chip chip-gold">${u.counter.join(", ")}</span></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
         <div style="font-size:11px; color:var(--text-muted);">
-          <em>${fac.penalty}</em>
+          <strong>Counter Triangle:</strong> Spears counter Swords & Cavalry (50% power penalty) • Swords counter Bows • Bows counter Spears.
         </div>
       `;
-      container.appendChild(card);
-    });
-  },
-
-  renderTechTab() {
-    const s = this.state;
-    const container = document.getElementById("tech-list-container");
-    container.innerHTML = "";
-    s.techTree.forEach(tech => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title">${tech.name}</span>
-          <span class="chip ${tech.researched ? 'chip-green' : 'chip-gold'}">
-            ${tech.researched ? "MASTERED" : `${tech.progress} / ${tech.cost} Points`}
-          </span>
-        </div>
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">${tech.desc}</p>
-        <div>
-          ${
-            tech.researched 
-              ? `<button class="btn" disabled style="opacity:0.5;">Researched</button>`
-              : `<button class="btn btn-primary" onclick="GameEngine.researchTech('${tech.id}')">Invest Research</button>`
-          }
-        </div>
-      `;
-      container.appendChild(card);
-    });
-
-    const craftContainer = document.getElementById("crafting-list-container");
-    craftContainer.innerHTML = "";
-    s.crafts.forEach(c => {
-      const costStr = Object.entries(c.cost).map(([k, v]) => `${v} ${k}`).join(", ");
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title">${c.name}</span>
-          <span class="chip chip-blue">${costStr}</span>
-        </div>
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">${c.effect}</p>
-        <button class="btn btn-primary" onclick="GameEngine.craftItem('${c.id}')">Craft Item</button>
-      `;
-      craftContainer.appendChild(card);
-    });
-  },
-
-  renderMilitaryTab() {
-    const s = this.state;
-    const tableBody = document.querySelector("#table-military tbody");
-    tableBody.innerHTML = "";
-    s.military.forEach(u => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><strong>${u.name}</strong></td>
-        <td>${u.type}</td>
-        <td><strong style="color:var(--accent-red);">${u.power}</strong></td>
-        <td>${u.health}%</td>
-        <td>${u.weapon} / ${u.armor}</td>
-        <td><span class="chip chip-gold">Counters: ${u.counter.join(", ")}</span></td>
-      `;
-      tableBody.appendChild(tr);
-    });
-  },
-
-  renderSpiritsTab() {
-    const s = this.state;
-    const sp = s.spirits[0];
-    document.getElementById("ui-spirit-name").innerText = sp.name;
-    document.getElementById("ui-spirit-title").innerText = sp.title;
-    document.getElementById("ui-spirit-favor").innerText = `${sp.favor}% Favor`;
-    document.getElementById("ui-spirit-taboo").innerText = sp.taboos;
-
-    const boonsContainer = document.getElementById("spirit-boons-list");
-    boonsContainer.innerHTML = "";
-    sp.boons.forEach(b => {
-      const li = document.createElement("li");
-      li.innerText = b;
-      boonsContainer.appendChild(li);
-    });
-  },
-
-  renderMagicTab() {
-    const m = this.state.magic;
-    const container = document.getElementById("mana-reservoirs-container");
-    container.innerHTML = "";
-    for (const [nat, cur] of Object.entries(m.pools)) {
-      const max = m.capacities[nat] || 50;
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title" style="text-transform:capitalize;">${nat} Mana</span>
-          <span class="chip chip-purple">${cur} / ${max}</span>
-        </div>
-        <div class="gauge-bar-bg" style="height:8px; margin-top:8px;">
-          <div class="gauge-fill" style="width:${(cur/max)*100}%; background:var(--accent-purple);"></div>
-        </div>
-      `;
-      container.appendChild(card);
     }
+
+    // 4. CULTURE
+    if (sphereKey === "culture") {
+      if (subtab === "spirits") {
+        const sp = s.spirits[0];
+        return `
+          <div class="card">
+            <div class="card-header">
+              <div><div class="card-title">${sp.name}</div><div style="font-size:11px; color:var(--text-muted);">${sp.title}</div></div>
+              <span class="chip chip-purple">${sp.favor}% Favor</span>
+            </div>
+            <div style="font-size:12px; margin-bottom:8px;">
+              <strong>Active Boons:</strong>
+              <ul style="margin-left:16px; margin-top:3px; color:var(--text-muted);">
+                ${sp.boons.map(b => `<li>${b}</li>`).join("")}
+              </ul>
+            </div>
+            <div style="font-size:11px; background:rgba(248,81,73,0.1); border-left:3px solid var(--accent-red); padding:8px; border-radius:4px; margin-bottom:10px;">
+              <strong>Divine Taboo:</strong> ${sp.taboos}
+            </div>
+            <button class="btn btn-primary" onclick="GameEngine.offerFoodSacrifice()">&#x1F525; Offer River Sacrifice (1 Culture, 20 Food)</button>
+          </div>
+        `;
+      }
+      if (subtab === "magic") {
+        return `
+          <div class="grid-4">
+            ${Object.entries(s.magic.pools).map(([nat, cur]) => {
+              const max = s.magic.capacities[nat] || 50;
+              return `
+                <div class="card" style="padding:9px;">
+                  <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:5px;">
+                    <strong style="text-transform:capitalize;">${nat}</strong>
+                    <span class="chip chip-purple">${cur}/${max}</span>
+                  </div>
+                  <div class="gauge-bar-bg" style="height:6px;">
+                    <div class="gauge-fill" style="width:${(cur / max) * 100}%; background:var(--accent-purple);"></div>
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+          <div class="grid-3">
+            ${s.spells.map(sp => `
+              <div class="card">
+                <div class="card-header"><span class="card-title">${sp.name}</span><span class="chip chip-purple">${sp.cost} ${sp.manaType}</span></div>
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${sp.desc}</p>
+                <button class="btn btn-primary" onclick="GameEngine.castSpell('${sp.id}')">&#x2728; Cast Spell</button>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+    }
+
+    // 5. RESEARCH
+    if (sphereKey === "research") {
+      const exploredCount = s.world ? s.world.cells.filter(c => c.explored).length : 0;
+      const totalCount = s.world ? s.world.cells.length : 0;
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:var(--bg-tertiary); padding:8px 12px; border-radius:6px;">
+          <span style="font-size:12px;">World Charted: <strong>${exploredCount} / ${totalCount} regions</strong></span>
+          <button class="btn btn-primary" onclick="GameEngine.focusNearestFrontier()">&#x1F9ED; Locate Nearest Uncharted Frontier</button>
+        </div>
+        <div class="grid-2">
+          ${s.techTree.map(tech => `
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">${tech.name}</span>
+                <span class="chip ${tech.researched ? 'chip-green' : 'chip-gold'}">${tech.researched ? "MASTERED" : `${tech.progress}/${tech.cost}`}</span>
+              </div>
+              <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${tech.desc}</p>
+              ${
+                tech.researched
+                  ? `<button class="btn" disabled>Researched</button>`
+                  : `<button class="btn btn-primary" onclick="GameEngine.researchTech('${tech.id}')">Invest Research</button>`
+              }
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    // 6. COMMERCE
+    if (sphereKey === "commerce") {
+      if (subtab === "crafting") {
+        return `
+          <div class="grid-3">
+            ${s.crafts.map(c => {
+              const costStr = Object.entries(c.cost).map(([k, v]) => `${v} ${k}`).join(", ");
+              return `
+                <div class="card">
+                  <div class="card-header"><span class="card-title">${c.name}</span><span class="chip chip-blue">${costStr}</span></div>
+                  <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${c.effect}</p>
+                  <button class="btn btn-primary" onclick="GameEngine.craftItem('${c.id}')">Craft</button>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+      }
+      if (subtab === "stockpiles") {
+        const r = s.resources;
+        return `
+          <div class="card" style="margin-bottom:10px;">
+            <div class="card-header"><span class="card-title">&#x1F3FA; Food Preservation</span></div>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+              Fresh Food decays by 45% each season. Seal 10 Fresh Food inside a Clay Pottery Jar so it never spoils.
+            </p>
+            <button class="btn btn-primary" onclick="GameEngine.preserveFoodWithPottery()">Seal 10 Food (Costs 1 Pottery Jar)</button>
+          </div>
+          <div class="grid-4">
+            ${[
+              ["Fresh Food", r.foodPerishable],
+              ["Preserved Food", r.foodPreserved],
+              ["Water", Math.round(r.water)],
+              ["Wood / Fuel", r.wood],
+              ["Stone & Materials", r.materials],
+              ["Fibers", r.fibers],
+              ["Hides", r.hides],
+              ["Pottery Jars", r.pottery]
+            ].map(([lbl, val]) => `
+              <div class="inspector-stat">
+                <div class="inspector-stat-label">${lbl}</div>
+                <div class="inspector-stat-val">${val}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+    }
+
+    return "";
   },
 
   renderChronicle() {
-    const containers = [
-      document.getElementById("chronicle-stream"),
-      document.getElementById("chronicle-stream-full")
-    ].filter(Boolean);
-
-    containers.forEach(container => {
-      container.innerHTML = "";
-      this.state.chronicle.forEach(item => {
-        const entry = document.createElement("div");
-        entry.className = `log-entry ${item.type || ""}`;
-        entry.innerHTML = `
-          <div class="log-timestamp">${item.season}, Year ${item.year}</div>
-          <div>${item.text}</div>
-        `;
-        container.appendChild(entry);
-      });
-    });
+    const latestEl = document.getElementById("live-chronicle-latest");
+    if (latestEl && this.state.chronicle.length > 0) {
+      const top = this.state.chronicle[0];
+      latestEl.innerText = `[${top.season} Y${top.year}] ${top.text}`;
+    }
   }
 };
 

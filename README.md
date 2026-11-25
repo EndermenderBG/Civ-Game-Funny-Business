@@ -37,15 +37,11 @@ You can launch and play the game immediately in any of the following ways:
 - **Physical Simulation (`map/world-generator.js`)**: Simulates heightmaps (Continents, Archipelago, Highlands, River Basin), latitude/altitude temperature lapse rates, wind-carried precipitation with rain shadows, downhill river carving, and Azgaar's biome matrix mapped directly to Civ Game terrains and loot tables.
 - **Fog of War & Territory Expansion**: Dispatch scouts using Research power to uncover uncharted regions, discover ancient anomalies and rival clans, claim fertile river cells (which double crop/pasture fertility), build dirt roads, and assign pops directly from the Cell Inspector.
 
-### 3. The 11 Ledger Stations
-1. **World Map**: Interactive SVG Voronoi map with Pan/Zoom, 4 map modes (Biomes, Territory, Relief, Climate), Fog of War, and Cell Inspector.
-2. **Overview & Actions**: Sphere potential gauges (Leadership, Development, Military, Culture, Research, Commerce), Action Planner, and real-time Telemetry.
-2. **Territory & Sites**: Geographic cells, biomes, Space Capacity, Fertility, natural sites (fisheries, groves, clay beds), and constructed defenses.
-3. **Population & Labor**: ~100-person pop cohorts, Blood traits, housing tiers, tool loadouts, and dietary status.
-4. **Crops & Herds**: Field yield accumulation (+35 yield/season), Autumn harvest cycle, and livestock reproduction following logistic capacity.
-5. **Factions Council**: Spear Warriors, Shamans, Traders, Elders, and Harvesters with opinion meters, active demands, and political stability effects.
-6. **Tech & Workshop**: Continuous Research progression (Herbalism, Agriculture, Husbandry, Pottery, Insulation, Ideograms) and craftable tools/gear.
-7. **Military Garrison**: Mobilized units, health, and tactical counter affinities (Spears > Cavalry/Swords > Bows > Spears).
-8. **Spirits & Pantheon**: Active river/nature spirits, favor bars, active boons, and divine taboos.
-9. **8 Arcane Manas**: Reservoirs for Arcana, Life, Fire, Water, Earth, Light, Dark, and Anarcane.
-10. **The Chronicle**: Historical record tracking seasonal outcomes, winter freezes, and divine interventions.
+### 3. Map-First HUD & 6 Embedded Sphere Menus
+The explorable Voronoi map is always the primary full-screen canvas, surrounded by collapsible glass overlays and a bottom **6-Sphere Command Dock**:
+1. **Leadership**: Sovereign & Dynasty, Ashkhan Muntu Bloodline traits, All Factions overview, Continuous Executive Action Planner, and Full Tribal Chronicle.
+2. **Development**: Population & Labor assignment, Crops & Pastoral Herds (including slaughter & taming), and Claimed Locations directory.
+3. **Military**: Garrisoned units, training, palisade defenses, and Tactical Counter Triangle.
+4. **Culture**: Spirits & Pantheon (sacrificial rites, favor, taboos) and 8 Arcane Manas with castable spells.
+5. **Research**: Technology Tree progression and Frontier locator.
+6. **Commerce**: Workshop Crafting queue, Food Preservation with clay pottery jars, and Resource stockpiles.
