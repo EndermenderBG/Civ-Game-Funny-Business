@@ -70,15 +70,49 @@
     </div>
   </header>
 
-  <!-- SLIM RESOURCE INVENTORY STRIP -->
+  <!-- SLIM RESOURCE INVENTORY STRIP WITH LIVE SEASONAL DELTAS -->
   <div id="resource-strip">
-    <div class="res-item"><span>&#x1F356; Fresh Food:</span> <strong id="res-food-perishable">150</strong> <span style="font-size:10px; color:var(--text-dim);">(-45%/season)</span></div>
-    <div class="res-item"><span>&#x1F3FA; Preserved:</span> <strong id="res-food-preserved">75</strong></div>
-    <div class="res-item"><span>&#x1F4A7; Water:</span> <strong id="res-water">250</strong></div>
-    <div class="res-item"><span>&#x1FAB5; Wood/Fuel:</span> <strong id="res-wood">90</strong></div>
-    <div class="res-item"><span>&#x2692; Materials:</span> <strong id="res-materials">40</strong></div>
-    <div class="res-item"><span>&#x1F9F5; Fibers:</span> <strong id="res-fibers">55</strong></div>
-    <div class="res-item"><span>&#x1F3FA; Pottery:</span> <strong id="res-pottery">12</strong></div>
+    <div class="res-item" id="res-box-food"
+      data-hover-tag="RESOURCE • PERISHABLE" data-hover-title="Fresh Food" data-hover-desc="Gathered from fisheries, hunting, herds, and autumn harvests. Unpreserved fresh food decays by 45% each season." data-hover-meta="Calculating...">
+      <span>&#x1F356; Fresh Food:</span>
+      <strong id="res-food-perishable">150</strong>
+      <span class="res-delta res-delta-pos" id="delta-food-perishable">+0/ssn</span>
+    </div>
+    <div class="res-item" id="res-box-preserved"
+      data-hover-tag="RESOURCE • PERMANENT" data-hover-title="Preserved Food" data-hover-desc="Food sealed in Clay Pottery Jars. Exempt from seasonal spoilage and eaten only when fresh food runs dry." data-hover-meta="Zero spoilage">
+      <span>&#x1F3FA; Preserved:</span>
+      <strong id="res-food-preserved">75</strong>
+      <span class="res-delta res-delta-zero" id="delta-food-preserved">+0/ssn</span>
+    </div>
+    <div class="res-item" id="res-box-water"
+      data-hover-tag="RESOURCE • SURVIVAL" data-hover-title="Fresh Water" data-hover-desc="Consumed by pops each season. Replenished by rivers, springs, and rain rituals." data-hover-meta="Calculating...">
+      <span>&#x1F4A7; Water:</span>
+      <strong id="res-water">250</strong>
+      <span class="res-delta res-delta-neg" id="delta-water">-9/ssn</span>
+    </div>
+    <div class="res-item" id="res-box-wood"
+      data-hover-tag="RESOURCE • FUEL & TIMBER" data-hover-title="Wood & Fuel" data-hover-desc="Used for construction, roads, and keeping pops warm during freezing Winter turns." data-hover-meta="Calculating...">
+      <span>&#x1FAB5; Wood/Fuel:</span>
+      <strong id="res-wood">90</strong>
+      <span class="res-delta res-delta-pos" id="delta-wood">+0/ssn</span>
+    </div>
+    <div class="res-item" id="res-box-materials"
+      data-hover-tag="RESOURCE • CRAFTING" data-hover-title="Stone & Materials" data-hover-desc="Clay, granite, copper, and iron extracted for crafting tools, weapons, pottery, and storehouses." data-hover-meta="Calculating...">
+      <span>&#x2692; Materials:</span>
+      <strong id="res-materials">40</strong>
+      <span class="res-delta res-delta-pos" id="delta-materials">+0/ssn</span>
+    </div>
+    <div class="res-item" id="res-box-fibers"
+      data-hover-tag="RESOURCE • TEXTILES" data-hover-title="Fibers & Reeds" data-hover-desc="Harvested for baskets, ropes, huts, and clothing." data-hover-meta="Calculating...">
+      <span>&#x1F9F5; Fibers:</span>
+      <strong id="res-fibers">55</strong>
+      <span class="res-delta res-delta-zero" id="delta-fibers">+0/ssn</span>
+    </div>
+    <div class="res-item"
+      data-hover-tag="GOODS • PRESERVATION" data-hover-title="Clay Pottery Jars" data-hover-desc="Crafted in the Commerce workshop. Spend 1 Jar to seal 10 Fresh Food permanently." data-hover-meta="Craft cost: 3 Materials, 1 Wood">
+      <span>&#x1F3FA; Pottery:</span>
+      <strong id="res-pottery">12</strong>
+    </div>
     <div class="res-item" style="margin-left:auto;">
       <span class="chip chip-gold" id="ui-map-command-limit">Claimed: 1 / 3</span>
     </div>
@@ -96,8 +130,8 @@
         data-hover-tag="MAP LENS" data-hover-title="Biome View" data-hover-desc="Displays natural terrains: Grasslands, Forests, Deserts, Wetlands, Tundra, and Mountain Peaks." data-hover-meta="Default exploration view">Biomes</button>
       <button class="btn btn-map-mode" data-mode="political" onclick="GameEngine.setMapMode('political')"
         data-hover-tag="MAP LENS" data-hover-title="Territory View" data-hover-desc="Highlights borders of the Janas Clan and discovered Rival Tribes across the continent." data-hover-meta="Shows sovereign ownership">Territory</button>
-      <button class="btn btn-map-mode" data-mode="elevation" onclick="GameEngine.setMapMode('elevation')"
-        data-hover-tag="MAP LENS" data-hover-title="Elevation & Relief" data-hover-desc="Topographic heightmap from sea basins to high mountain ridges." data-hover-meta="Higher elevation lowers temperature">Relief</button>
+      <button class="btn btn-map-mode" data-mode="fertility" onclick="GameEngine.setMapMode('fertility')"
+        data-hover-tag="MAP LENS" data-hover-title="Fertility & Soil View" data-hover-desc="Highlights agricultural field and pasture capacity (brightest along rivers which grant 2x fertility)." data-hover-meta="Bright Green = High Fertility • Gray = Barren">Fertility</button>
       <button class="btn btn-map-mode" data-mode="climate" onclick="GameEngine.setMapMode('climate')"
         data-hover-tag="MAP LENS" data-hover-title="Climate & Temperature" data-hover-desc="Visualizes latitude & altitude temperature zones from arctic frost to equatorial heat." data-hover-meta="Blue = Cold • Red = Hot">Climate</button>
 
@@ -112,15 +146,15 @@
 
       <div class="toolbar-sep"></div>
 
-      <select id="select-world-preset" style="padding:3px 6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:5px; font-size:11px;">
+      <select id="select-world-preset" onchange="GameEngine.regenerateWorld(true)" style="padding:3px 6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:5px; font-size:11px;">
         <option value="river_basin">River Basin</option>
         <option value="continents">Twin Continents</option>
         <option value="archipelago">Archipelago</option>
         <option value="highlands">Highland Spine</option>
       </select>
-      <input id="input-world-seed" type="text" value="Janas-Dawn" placeholder="Seed..." style="width:92px; padding:3px 6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:5px; font-size:11px;">
-      <button class="btn btn-primary" onclick="GameEngine.regenerateWorld()"
-        data-hover-tag="WORLD GEN" data-hover-title="Generate New World" data-hover-desc="Rebuilds the Voronoi cells, heightmap, rivers, and biomes using the chosen seed and terrain preset." data-hover-meta="Deterministic seed generator">New World</button>
+      <input id="input-world-seed" type="text" value="" placeholder="Seed..." onkeydown="if(event.key==='Enter') GameEngine.regenerateWorld(false)" style="width:92px; padding:3px 6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:5px; font-size:11px;">
+      <button class="btn btn-primary" onclick="GameEngine.regenerateWorld(true)"
+        data-hover-tag="WORLD GEN" data-hover-title="Generate Random World" data-hover-desc="Generates a completely new random Voronoi world matching the selected preset." data-hover-meta="Press Enter in seed box to load a custom seed">&#x1F3B2; New World</button>
     </div>
 
     <!-- FLOATING SEASONAL ACTION TRACKER -->
@@ -231,6 +265,22 @@
       <div id="modal-event-title" class="modal-title">Event Title</div>
       <div id="modal-event-body" class="modal-body">Event narrative description...</div>
       <div id="modal-event-actions" class="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- NON-BLOCKING TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <!-- END OF SEASON / YEAR / DECADE WARNING MODAL -->
+  <div id="turn-warning-modal-overlay">
+    <div class="modal-dialog" style="max-width:480px; border-color:var(--accent-amber);">
+      <div class="modal-tag" style="color:var(--accent-amber);" id="turn-warn-tag">SEASON TRANSITION CHECK</div>
+      <div class="modal-title" id="turn-warn-title">Unspent Sphere Points & Transition Alerts</div>
+      <div class="modal-body" id="turn-warn-body"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px;">
+        <button class="btn" style="padding:8px 14px;" onclick="GameEngine.cancelTurnWarning()">&#x2190; Go Back & Spend</button>
+        <button class="btn btn-primary" style="padding:8px 16px; background:#238636;" onclick="GameEngine.confirmAdvanceSeason()">Proceed Anyway &#x27A4;</button>
+      </div>
     </div>
   </div>
 

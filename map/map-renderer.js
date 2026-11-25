@@ -190,7 +190,7 @@ const MapRenderer = {
             : `<span style="color:#8b949e;">Unclaimed</span>`;
         tooltip.innerHTML = `
           <strong>${cell.name}</strong><br>
-          <span>${cell.biomeName} • Elev: ${cell.h} • ${cell.temp}°C</span><br>
+          <span>${cell.biomeName} • ${cell.temp}°C • ${cell.fieldsMax}F/${cell.pasturesMax}P</span><br>
           ${cell.hasRiver ? '<span style="color:#58a6ff;">River (2x Fertility)</span> • ' : ''}${ownerTag}
         `;
       }
@@ -239,12 +239,13 @@ const MapRenderer = {
       return cell.color;
     }
 
-    if (this.mode === "elevation") {
-      if (!cell.isLand) return "#1e3a5f";
-      const t = (cell.h - 20) / 80;
-      const r = Math.round(50 + t * 185);
-      const g = Math.round(135 + (t < 0.5 ? t * 140 : (1 - t) * 140));
-      const b = Math.round(65 + (t > 0.7 ? (t - 0.7) * 500 : 0));
+    if (this.mode === "fertility") {
+      if (!cell.isLand) return "#1b2e47";
+      const ratio = Math.min(1, cell.fieldsMax / 14);
+      if (cell.fieldsMax === 0) return "#544c47";
+      const r = Math.round(135 - ratio * 95);
+      const g = Math.round(115 + ratio * 105);
+      const b = Math.round(70 - ratio * 15);
       return `rgb(${r}, ${g}, ${b})`;
     }
 

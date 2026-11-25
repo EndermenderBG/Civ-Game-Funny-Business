@@ -125,9 +125,9 @@ const WorldGenerator = {
 
     // 3. Heightmap Generation (Azgaar Blob & Ridge Propagation)
     const heights = new Float32Array(n);
-    const blobPower = 0.915; // Tuned for ~850-1000 cells
+    const defaultBlobPower = preset === "archipelago" ? 0.845 : 0.915;
 
-    const addHill = (minH, maxH, xMin, xMax, yMin, yMax) => {
+    const addHill = (minH, maxH, xMin, xMax, yMin, yMax, customBlob = defaultBlobPower) => {
       const h = minH + rng() * (maxH - minH);
       const sx = (xMin + rng() * (xMax - xMin)) * width;
       const sy = (yMin + rng() * (yMax - yMin)) * height;
@@ -142,7 +142,7 @@ const WorldGenerator = {
         for (let i = 0; i < neighbors.length; i++) {
           const c = neighbors[i];
           if (change[c] > 0) continue;
-          const decayed = Math.pow(change[q], blobPower) * (rng() * 0.18 + 0.9);
+          const decayed = Math.pow(change[q], customBlob) * (rng() * 0.18 + 0.9);
           if (decayed > 1.2) {
             change[c] = decayed;
             queue.push(c);
@@ -167,7 +167,7 @@ const WorldGenerator = {
       const queue = [start];
       while (queue.length && curH > 1.5) {
         const q = queue.shift();
-        curH = Math.pow(curH, blobPower * 0.97) * (rng() * 0.15 + 0.88);
+        curH = Math.pow(curH, defaultBlobPower * 0.97) * (rng() * 0.15 + 0.88);
         const neighbors = cells.c[q];
         for (let i = 0; i < neighbors.length; i++) {
           const c = neighbors[i];
@@ -230,27 +230,82 @@ const WorldGenerator = {
       }
     };
 
-    // Apply heightmap template preset
+    // Apply genuinely distinct heightmap presets
     if (preset === "continents") {
-      addHill(35, 55, 0.20, 0.45, 0.25, 0.70);
-      addHill(35, 55, 0.55, 0.80, 0.25, 0.70);
-      for (let i = 0; i < 6; i++) addHill(20, 38, 0.15, 0.85, 0.15, 0.85);
-      addRange(35, 55, 0.22 + rng() * 0.15, 0.25, 0.40 + rng() * 0.15, 0.75);
-      addRange(30, 50, 0.60, 0.30, 0.78, 0.68);
-      addPit(20, 35, 0.42, 0.58, 0.30, 0.70);
+      // Western Continent
+      addHill(36, 50, 0.16, 0.30, 0.25, 0.72, 0.895);
+      addHill(28, 42, 0.18, 0.34, 0.22, 0.75, 0.885);
+      addRange(35, 50, 0.18, 0.22, 0.30, 0.76);
+      // Eastern Continent
+      addHill(36, 50, 0.70, 0.84, 0.25, 0.72, 0.895);
+      addHill(28, 42, 0.66, 0.82, 0.22, 0.75, 0.885);
+      addRange(35, 50, 0.72, 0.24, 0.82, 0.74);
+      // Carve a natural central ocean channel splitting the two landmasses
+      const phase = rng() * Math.PI * 2;
+      for (let i = 0; i < n; i++) {
+        const nx = points[i][0] / width;
+        const ny = points[i][1] / height;
+        const channelCenter = 0.50 + Math.sin(ny * 6.5 + phase) * 0.045;
+        const distFromChannel = Math.abs(nx - channelCenter);
+        if (distFromChannel < 0.09) {
+          heights[i] = Math.min(heights[i], 6 + (distFromChannel / 0.09) * 8);
+        }
+      }
     } else if (preset === "archipelago") {
-      for (let i = 0; i < 16; i++) addHill(24, 48, 0.12, 0.88, 0.12, 0.88);
-      for (let i = 0; i < 5; i++) addPit(18, 30, 0.20, 0.80, 0.20, 0.80);
+      // Guaranteed ocean-separated islands via topological BFS moat invariant
+      for (let i = 0; i < n; i++) heights[i] = 5 + rng() * 5;
+      const islandOwner = new Int16Array(n).fill(-1);
+      const seeds = [];
+      let attempts = 0;
+      while (seeds.length < 15 && attempts < 250) {
+        attempts++;
+        const sx = (0.12 + rng() * 0.76) * width;
+        const sy = (0.14 + rng() * 0.72) * height;
+        const cid = findCellAt(sx, sy);
+        if (cells.b[cid]) continue;
+        if (seeds.some(sid => Math.hypot(points[sid][0] - points[cid][0], points[sid][1] - points[cid][1]) < spacing * 4.0)) continue;
+        seeds.push(cid);
+      }
+
+      seeds.forEach((seedId, k) => {
+        const targetSize = 7 + Math.floor(rng() * 16); // 7 to 22 cells per island
+        const peak = 46 + rng() * 34;
+        const islandCells = [seedId];
+        islandOwner[seedId] = k;
+        heights[seedId] = peak;
+
+        const frontier = [...cells.c[seedId]];
+        while (islandCells.length < targetSize && frontier.length > 0) {
+          const idx = Math.floor(rng() * frontier.length);
+          const cand = frontier.splice(idx, 1)[0];
+          if (islandOwner[cand] !== -1 || cells.b[cand]) continue;
+          // Topological moat check: do not touch any cell belonging to another island
+          const touchesOther = cells.c[cand].some(nid => islandOwner[nid] !== -1 && islandOwner[nid] !== k);
+          if (touchesOther) continue;
+
+          islandOwner[cand] = k;
+          islandCells.push(cand);
+          const distRatio = islandCells.length / targetSize;
+          heights[cand] = Math.max(24, Math.round(peak * (1 - distRatio * 0.55) + (rng() - 0.5) * 8));
+          for (const nid of cells.c[cand]) {
+            if (islandOwner[nid] === -1) frontier.push(nid);
+          }
+        }
+      });
     } else if (preset === "highlands") {
-      addHill(40, 60, 0.25, 0.75, 0.20, 0.80);
-      addHill(30, 50, 0.20, 0.80, 0.20, 0.80);
-      addRange(45, 65, 0.15, 0.20, 0.85, 0.75);
-      addRange(40, 60, 0.20, 0.80, 0.75, 0.25);
-    } else { // river_basin (default lush valley)
-      addHill(38, 52, 0.30, 0.70, 0.25, 0.75);
-      for (let i = 0; i < 7; i++) addHill(22, 36, 0.20, 0.80, 0.20, 0.80);
-      addRange(42, 62, 0.18, 0.18, 0.82, 0.22); // Northern mountain wall feeding rivers
-      addRange(35, 50, 0.15, 0.30, 0.25, 0.80); // Western highland ridge
+      // Rugged alpine plateau with intersecting mountain spines
+      addHill(34, 48, 0.25, 0.75, 0.25, 0.75, 0.92);
+      addHill(30, 44, 0.20, 0.80, 0.22, 0.78, 0.91);
+      addRange(52, 72, 0.14, 0.20, 0.86, 0.78);
+      addRange(48, 68, 0.18, 0.80, 0.80, 0.22);
+      addRange(40, 58, 0.45, 0.14, 0.55, 0.85);
+    } else {
+      // River Basin: Horseshoe of northern/western highlands draining into fertile plains & southern sea
+      addHill(36, 48, 0.30, 0.72, 0.30, 0.72, 0.918);
+      for (let i = 0; i < 6; i++) addHill(20, 34, 0.22, 0.82, 0.20, 0.78, 0.90);
+      addRange(44, 62, 0.16, 0.16, 0.84, 0.20);
+      addRange(38, 54, 0.16, 0.22, 0.24, 0.78);
+      addPit(24, 38, 0.40, 0.65, 0.72, 0.92);
     }
 
     // Force map edges to be deep ocean so continents sit naturally inside viewport
@@ -263,13 +318,17 @@ const WorldGenerator = {
       if (cells.b[i]) heights[i] = Math.min(heights[i], 8);
     }
 
-    // Gentle smoothing pass
+    // Gentle smoothing pass (preserve exact moated islands in archipelago mode)
     const smoothedH = new Uint8Array(n);
-    for (let i = 0; i < n; i++) {
-      const neigh = cells.c[i];
-      let sum = heights[i] * 2;
-      for (let j = 0; j < neigh.length; j++) sum += heights[neigh[j]];
-      smoothedH[i] = Math.min(100, Math.round(sum / (2 + neigh.length)));
+    if (preset === "archipelago") {
+      for (let i = 0; i < n; i++) smoothedH[i] = Math.min(100, Math.max(0, Math.round(heights[i])));
+    } else {
+      for (let i = 0; i < n; i++) {
+        const neigh = cells.c[i];
+        let sum = heights[i] * 2;
+        for (let j = 0; j < neigh.length; j++) sum += heights[neigh[j]];
+        smoothedH[i] = Math.min(100, Math.round(sum / (2 + neigh.length)));
+      }
     }
 
     // 4. Temperature Simulation (Azgaar latitude gradient + realistic altitude drop)

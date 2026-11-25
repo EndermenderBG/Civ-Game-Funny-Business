@@ -130,15 +130,21 @@ const GameState = {
     }
   ],
 
-  // Pops (Discrete cohorts of ~100 people)
+  // Pops (Discrete cohorts of ~100 people - Single Source of Truth for Labor!)
   pops: [
-    { id: "pop_1", name: "First Hearth", blood: "Ashkhan Muntu", faction: "Shamans", locationId: "loc_janas", workplace: "River Fishery", housing: "Hut", tools: ["Spear", "Fish Trap"], health: 100, diet: "balanced" },
-    { id: "pop_2", name: "River Fisherfolk", blood: "Ashkhan Muntu", faction: "Traders", locationId: "loc_janas", workplace: "River Fishery", housing: "Hut", tools: ["Fish Trap"], health: 100, diet: "balanced" },
-    { id: "pop_3", name: "Timber Wardens", blood: "Ashkhan Muntu", faction: "Spear Warriors", locationId: "loc_janas", workplace: "Hardwood Grove", housing: "Hut", tools: ["Axe"], health: 95, diet: "balanced" },
-    { id: "pop_4", name: "Clay Gatherers", blood: "Ashkhan Muntu", faction: "Elders", locationId: "loc_janas", workplace: "River Clay Bank", housing: "Hut", tools: ["Basket"], health: 100, diet: "balanced" },
-    { id: "pop_5", name: "Field Keepers", blood: "Ashkhan Muntu", faction: "Harvesters", locationId: "loc_janas", workplace: "Crop Field", housing: "Hut", tools: ["Hoe"], health: 100, diet: "balanced" },
-    { id: "pop_6", name: "Toolsmiths", blood: "Ashkhan Muntu", faction: "Harvesters", locationId: "loc_janas", workplace: "Basic Workshop", housing: "Hut", tools: ["Hammer"], health: 100, diet: "balanced" }
+    { id: "pop_1", name: "First Hearth", blood: "Ashkhan Muntu", faction: "Shamans", locationId: 0, workplaceId: "fish", housing: "Hut", tools: ["Spear", "Fish Trap"], health: 100, diet: "balanced" },
+    { id: "pop_2", name: "River Fisherfolk", blood: "Ashkhan Muntu", faction: "Traders", locationId: 0, workplaceId: "fish", housing: "Hut", tools: ["Fish Trap"], health: 100, diet: "balanced" },
+    { id: "pop_3", name: "Timber Wardens", blood: "Ashkhan Muntu", faction: "Spear Warriors", locationId: 0, workplaceId: "wood", housing: "Hut", tools: ["Axe"], health: 95, diet: "balanced" },
+    { id: "pop_4", name: "Clay Gatherers", blood: "Ashkhan Muntu", faction: "Elders", locationId: 0, workplaceId: "clay", housing: "Hut", tools: ["Basket"], health: 100, diet: "balanced" },
+    { id: "pop_5", name: "Field Keepers", blood: "Ashkhan Muntu", faction: "Harvesters", locationId: 0, workplaceId: "crop_field", housing: "Hut", tools: ["Hoe"], health: 100, diet: "balanced" },
+    { id: "pop_6", name: "Toolsmiths", blood: "Ashkhan Muntu", faction: "Harvesters", locationId: 0, workplaceId: "workshop", housing: "Hut", tools: ["Hammer"], health: 100, diet: "balanced" }
   ],
+
+  activeTechId: "tech_pottery",
+  automation: {
+    autoSealFood: false,
+    autoWorshipSpirit: false
+  },
 
   // Demographics Progress Accumulator (toward next pop)
   demographicGrowthPool: 0.25,
@@ -238,21 +244,72 @@ const GameEngine = {
   state: GameState,
 
   init() {
-    this.initWorld("Janas-Dawn", "river_basin");
+    const randomSeed = `World-${Math.floor(10000 + Math.random() * 90000)}`;
+    const seedInput = document.getElementById("input-world-seed");
+    if (seedInput) seedInput.value = randomSeed;
+    this.initWorld(randomSeed, "river_basin");
     this.renderAll();
     this.setupEventListeners();
     this.renderTutorial();
-    this.log("The council convenes. Explore the frontier on the World Map and guide the tribe.", "log-divine");
+    this.log(`The council convenes on world "${randomSeed}". Explore the frontier and guide the tribe.`, "log-divine");
   },
 
   initWorld(seed, preset) {
     this.state.world = WorldGenerator.generate(seed, preset);
+    const startId = this.state.world.startCellId;
+    // Bind initial pops cleanly to actual starting capital site IDs
+    const startSites = this.state.world.cells[startId].sites || [];
+    const fishSite = startSites.find(s => s.name.includes("Fishery"));
+    const woodSite = startSites.find(s => s.name.includes("Hardwood"));
+    const claySite = startSites.find(s => s.name.includes("Clay"));
+    this.state.pops.forEach((p, idx) => {
+      p.locationId = startId;
+      if (idx <= 1 && fishSite) p.workplaceId = fishSite.id;
+      else if (idx === 2 && woodSite) p.workplaceId = woodSite.id;
+      else if (idx === 3 && claySite) p.workplaceId = claySite.id;
+      else if (idx === 4) p.workplaceId = "crop_field";
+      else if (idx === 5) p.workplaceId = "workshop";
+      else p.workplaceId = "idle";
+    });
+
     this.syncLocationsFromWorld();
     const svgEl = document.getElementById("world-map-svg");
     if (svgEl) {
       MapRenderer.init(svgEl, this.state.world);
-      this.onMapCellSelected(this.state.world.startCellId);
+      this.onMapCellSelected(startId);
     }
+  },
+
+  getSiteWorkers(siteId) {
+    return this.state.pops.filter(p => p.workplaceId === siteId).length;
+  },
+
+  getCellPopCount(cellId) {
+    const cell = this.state.world ? this.state.world.cells[cellId] : null;
+    if (!cell || cell.owner !== "player") return 0;
+    const siteIds = new Set(cell.sites.map(s => s.id));
+    if (cellId === this.state.world.startCellId) {
+      siteIds.add("crop_field");
+      siteIds.add("workshop");
+    }
+    return this.state.pops.filter(p => siteIds.has(p.workplaceId)).length;
+  },
+
+  showToast(message, type = "warning") {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    const toast = document.createElement("div");
+    toast.className = `toast-item toast-${type}`;
+    const icons = { error: "&#x26A0;", warning: "&#x26A0;", success: "&#x2714;", divine: "&#x2728;", info: "&#x2139;" };
+    toast.innerHTML = `<div style="display:flex; gap:8px; align-items:flex-start;">
+      <span>${icons[type] || "&#x2139;"}</span>
+      <span style="flex:1;">${message}</span>
+    </div>`;
+    toast.addEventListener("click", () => toast.remove());
+    container.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 3600);
   },
 
   syncLocationsFromWorld() {
@@ -281,11 +338,17 @@ const GameEngine = {
     MapRenderer.setMode(mode);
   },
 
-  regenerateWorld() {
-    const seed = document.getElementById("input-world-seed").value.trim() || `World-${Math.floor(Math.random() * 9999)}`;
+  regenerateWorld(randomize = true) {
+    const seedInput = document.getElementById("input-world-seed");
+    let seed = seedInput ? seedInput.value.trim() : "";
+    if (randomize || !seed) {
+      seed = `World-${Math.floor(10000 + Math.random() * 90000)}`;
+      if (seedInput) seedInput.value = seed;
+    }
     const preset = document.getElementById("select-world-preset").value;
     this.initWorld(seed, preset);
     this.renderAll();
+    this.showToast(`Generated ${preset.replace("_", " ")} world "${seed}"`, "divine");
     this.log(`Generated new procedural Voronoi world "${seed}" (${preset}).`, "log-divine");
   },
 
@@ -368,7 +431,9 @@ const GameEngine = {
 
     let sitesHtml = "";
     if (cell.sites && cell.sites.length > 0) {
-      sitesHtml = cell.sites.map(st => `
+      sitesHtml = cell.sites.map(st => {
+        const workerCount = this.getSiteWorkers(st.id);
+        return `
         <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-tertiary); padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:6px;">
           <div>
             <strong>${st.name}</strong><br>
@@ -377,14 +442,17 @@ const GameEngine = {
           ${
             cell.owner === "player"
               ? `<div style="display:flex; align-items:center; gap:4px;">
-                  <button class="btn" style="padding:2px 7px;" onclick="GameEngine.adjustSiteWorkers(${cell.id}, '${st.id}', -1)">-</button>
-                  <span style="font-family:var(--font-mono); font-weight:700;">${st.assignedPops}</span>
-                  <button class="btn" style="padding:2px 7px;" onclick="GameEngine.adjustSiteWorkers(${cell.id}, '${st.id}', 1)">+</button>
+                  <button class="btn" style="padding:2px 7px;" onclick="GameEngine.adjustSiteWorkers(${cell.id}, '${st.id}', -1)"
+                    data-hover-tag="LABOR" data-hover-title="Unassign Pop" data-hover-desc="Moves 1 pop cohort off this site back to Idle status." data-hover-meta="Synced with Development → Pops & Labor">-</button>
+                  <span style="font-family:var(--font-mono); font-weight:700;">${workerCount}</span>
+                  <button class="btn" style="padding:2px 7px;" onclick="GameEngine.adjustSiteWorkers(${cell.id}, '${st.id}', 1)"
+                    data-hover-tag="LABOR" data-hover-title="Assign Pop" data-hover-desc="Assigns 1 idle pop cohort to harvest this site each season." data-hover-meta="Synced with Development → Pops & Labor">+</button>
                  </div>`
               : `<span class="chip">${st.type}</span>`
           }
         </div>
-      `).join("");
+      `;
+      }).join("");
     } else {
       sitesHtml = `<div style="font-size:12px; color:var(--text-muted);">No extractable land sites.</div>`;
     }
@@ -435,6 +503,9 @@ const GameEngine = {
       `;
     }
 
+    const biomeDef = WorldGenerator.BIOMES[cell.biomeId] || { habitability: 0 };
+    const stationedPops = this.getCellPopCount(cell.id);
+
     inspector.innerHTML = `
       <div class="card-header" style="margin-bottom:4px;">
         <span class="card-title">${cell.name}</span>
@@ -446,8 +517,8 @@ const GameEngine = {
 
       <div class="inspector-stat-grid">
         <div class="inspector-stat">
-          <div class="inspector-stat-label">Elevation</div>
-          <div class="inspector-stat-val">${cell.h} m</div>
+          <div class="inspector-stat-label">${cell.owner === "player" ? "Labor Stationed" : "Habitability"}</div>
+          <div class="inspector-stat-val">${cell.owner === "player" ? `${stationedPops} Pops (~${stationedPops * 100})` : `${biomeDef.habitability}%`}</div>
         </div>
         <div class="inspector-stat">
           <div class="inspector-stat-label">Climate</div>
@@ -480,7 +551,7 @@ const GameEngine = {
     if (!cell || cell.explored) return;
 
     if (s.spheres.research.current < 1) {
-      alert("Need at least 1 Research power to dispatch scouts!");
+      this.showToast("Need at least 1 Research power to dispatch scouts!", "warning");
       return;
     }
     s.spheres.research.current -= 1;
@@ -517,11 +588,11 @@ const GameEngine = {
 
     if (!cell || !cell.isLand || cell.owner) return;
     if (claimedCount >= s.commandLimit) {
-      alert("Command Limit reached! Research Ideograms or level Leadership to claim more cells.");
+      this.showToast("Command Limit reached! Research Ideograms or level Leadership to claim more cells.", "warning");
       return;
     }
     if (s.spheres.development.current < 2) {
-      alert("Need 2 Development power to establish an outpost and claim territory!");
+      this.showToast("Need 2 Development power to establish an outpost and claim territory!", "warning");
       return;
     }
 
@@ -540,7 +611,7 @@ const GameEngine = {
     const cell = s.world.cells[cellId];
     if (!cell || cell.owner !== "player" || cell.hasRoad) return;
     if (s.resources.wood < 10 || s.spheres.development.current < 1) {
-      alert("Need 10 Wood and 1 Development power to clear a Dirt Road.");
+      this.showToast("Need 10 Wood and 1 Development power to clear a Dirt Road.", "warning");
       return;
     }
     s.resources.wood -= 10;
@@ -560,7 +631,7 @@ const GameEngine = {
     const cell = s.world.cells[cellId];
     if (!cell || !cell.anomaly) return;
     if (s.spheres.culture.current < 2) {
-      alert("Need 2 Culture power to perform investigation rituals.");
+      this.showToast("Need 2 Culture power to perform investigation rituals.", "warning");
       return;
     }
     s.spheres.culture.current -= 2;
@@ -580,7 +651,7 @@ const GameEngine = {
   tradeWithRival(cellId) {
     const s = this.state;
     if (s.spheres.commerce.current < 1 || s.resources.pottery < 3) {
-      alert("Need 1 Commerce power and 3 Pottery to barter with rival clans.");
+      this.showToast("Need 1 Commerce power and 3 Pottery to barter with rival clans.", "warning");
       return;
     }
     s.spheres.commerce.current -= 1;
@@ -595,7 +666,7 @@ const GameEngine = {
   raidRival(cellId) {
     const s = this.state;
     if (s.spheres.military.current < 2) {
-      alert("Need 2 Military power to launch a raid!");
+      this.showToast("Need 2 Military power to launch a raid!", "warning");
       return;
     }
     s.spheres.military.current -= 2;
@@ -623,17 +694,21 @@ const GameEngine = {
     const site = cell.sites.find(st => st.id === siteId);
     if (!site) return;
 
-    const totalAssigned = s.world.cells
-      .filter(c => c.owner === "player")
-      .flatMap(c => c.sites)
-      .reduce((sum, st) => sum + st.assignedPops, 0);
-
-    if (delta > 0 && totalAssigned >= s.pops.length) {
-      alert(`All ${s.pops.length} pop cohorts are already assigned! Unassign from another site or grow your population.`);
-      return;
+    if (delta > 0) {
+      const idlePop = s.pops.find(p => p.workplaceId === "idle");
+      if (!idlePop) {
+        this.showToast(`All ${s.pops.length} pops are assigned! Unassign one first or reassign in Development → Pops & Labor.`, "warning");
+        return;
+      }
+      idlePop.locationId = cellId;
+      idlePop.workplaceId = siteId;
+      this.recordAction(`Assign ${idlePop.name} → ${site.name}`, "development", "Free", "100%", "Success", `Workers: ${this.getSiteWorkers(siteId)}`);
+    } else if (delta < 0) {
+      const assignedPop = s.pops.find(p => p.workplaceId === siteId);
+      if (!assignedPop) return;
+      assignedPop.workplaceId = "idle";
+      this.recordAction(`Unassign ${assignedPop.name} ← ${site.name}`, "development", "Free", "100%", "Success", `Workers: ${this.getSiteWorkers(siteId)}`);
     }
-    site.assignedPops = Math.max(0, site.assignedPops + delta);
-    this.recordAction(`${delta > 0 ? "Assign" : "Unassign"} Labor: ${site.name}`, "development", "Free", "100%", "Success", `Workers: ${site.assignedPops}`);
     this.onMapCellSelected(cellId);
     this.renderAll();
   },
@@ -666,9 +741,9 @@ const GameEngine = {
   ],
 
   setupEventListeners() {
-    // Next Turn button
+    // Next Turn button (checks unspent sphere points, year-end & decade-end warnings)
     document.getElementById("btn-end-turn").addEventListener("click", () => {
-      this.advanceSeason();
+      this.requestAdvanceSeason();
     });
     this.setupHoverCards();
   },
@@ -852,7 +927,7 @@ const GameEngine = {
     const s = this.state;
     const totalFood = s.resources.foodPerishable + s.resources.foodPreserved;
     if (s.spheres.leadership.current < 1 || totalFood < 25) {
-      alert("Need 1 Leadership energy and 25 Food to host a tribal feast.");
+      this.showToast("Need 1 Leadership energy and 25 Food to host a tribal feast.", "warning");
       return;
     }
     s.spheres.leadership.current -= 1;
@@ -872,7 +947,7 @@ const GameEngine = {
   codifyPeaceAccord() {
     const s = this.state;
     if (s.spheres.leadership.current < 2) {
-      alert("Need 2 Leadership energy to decree a tribal Peace Accord.");
+      this.showToast("Need 2 Leadership energy to decree a tribal Peace Accord.", "warning");
       return;
     }
     s.spheres.leadership.current -= 2;
@@ -882,12 +957,24 @@ const GameEngine = {
     this.renderAll();
   },
 
-  reassignPop(popId, newWorkplace) {
+  reassignPop(popId, combinedVal) {
     const pop = this.state.pops.find(p => p.id === popId);
     if (!pop) return;
-    pop.workplace = newWorkplace;
-    this.log(`Reassigned ${pop.name} to ${newWorkplace}.`);
-    this.recordAction(`Reassign ${pop.name}`, "development", "Free", "100%", "Success", `Moved to ${newWorkplace}`);
+    const [locStr, wpId] = combinedVal.split("|");
+    pop.locationId = parseInt(locStr, 10) || this.state.world.startCellId;
+    pop.workplaceId = wpId || "idle";
+
+    let label = "Unassigned (Idle)";
+    if (wpId === "crop_field") label = "Crop Field (Sorghum)";
+    else if (wpId === "workshop") label = "Basic Workshop";
+    else if (wpId !== "idle") {
+      const cell = this.state.world.cells[pop.locationId];
+      const st = cell ? cell.sites.find(x => x.id === wpId) : null;
+      if (st) label = `${cell.name}: ${st.name}`;
+    }
+
+    this.log(`Reassigned ${pop.name} → ${label}.`);
+    this.recordAction(`Reassign ${pop.name}`, "development", "Free", "100%", "Success", `Moved to ${label}`);
     this.renderAll();
   },
 
@@ -895,7 +982,7 @@ const GameEngine = {
     const s = this.state;
     const herd = s.herds.find(h => h.id === herdId);
     if (!herd || herd.count <= count) {
-      alert("Cannot slaughter below breeding minimum!");
+      this.showToast("Cannot slaughter below breeding minimum!", "warning");
       return;
     }
     herd.count -= count;
@@ -911,7 +998,7 @@ const GameEngine = {
   tameWildGoats() {
     const s = this.state;
     if (s.spheres.development.current < 2) {
-      alert("Need 2 Development energy to corral wild goats.");
+      this.showToast("Need 2 Development energy to corral wild goats.", "warning");
       return;
     }
     s.spheres.development.current -= 2;
@@ -924,7 +1011,7 @@ const GameEngine = {
   trainSpearmen() {
     const s = this.state;
     if (s.spheres.military.current < 1 || s.resources.materials < 10 || s.resources.wood < 12) {
-      alert("Need 1 Military energy, 10 Materials, and 12 Wood to outfit a spear regiment.");
+      this.showToast("Need 1 Military energy, 10 Materials, and 12 Wood to outfit a spear regiment.", "warning");
       return;
     }
     s.spheres.military.current -= 1;
@@ -950,7 +1037,7 @@ const GameEngine = {
   fortifyCamp() {
     const s = this.state;
     if (s.spheres.military.current < 1 || s.resources.wood < 15) {
-      alert("Need 1 Military energy and 15 Wood to raise palisade defenses.");
+      this.showToast("Need 1 Military energy and 15 Wood to raise palisade defenses.", "warning");
       return;
     }
     s.spheres.military.current -= 1;
@@ -974,7 +1061,7 @@ const GameEngine = {
   offerFoodSacrifice() {
     const s = this.state;
     if (s.spheres.culture.current < 1 || s.resources.foodPerishable < 20) {
-      alert("Need 1 Culture energy and 20 Fresh Food to offer a river sacrifice.");
+      this.showToast("Need 1 Culture energy and 20 Fresh Food to offer a river sacrifice.", "warning");
       return;
     }
     s.spheres.culture.current -= 1;
@@ -993,7 +1080,7 @@ const GameEngine = {
     const spell = s.spells.find(sp => sp.id === spellId);
     if (!spell) return;
     if ((s.magic.pools[spell.manaType] || 0) < spell.cost) {
-      alert(`Insufficient ${spell.manaType} mana (Need ${spell.cost}).`);
+      this.showToast(`Insufficient ${spell.manaType} mana (Need ${spell.cost}).`, "warning");
       return;
     }
     s.magic.pools[spell.manaType] -= spell.cost;
@@ -1021,7 +1108,7 @@ const GameEngine = {
   preserveFoodWithPottery() {
     const s = this.state;
     if (s.resources.pottery < 1 || s.resources.foodPerishable < 10) {
-      alert("Need at least 1 Pottery Jar and 10 Fresh Food to seal rations.");
+      this.showToast("Need at least 1 Pottery Jar and 10 Fresh Food to seal rations.", "warning");
       return;
     }
     s.resources.pottery -= 1;
@@ -1037,7 +1124,7 @@ const GameEngine = {
     if (!w) return;
     const frontier = w.cells.find(c => !c.explored && c.neighbors.some(nid => w.cells[nid].explored));
     if (!frontier) {
-      alert("All reachable frontier cells are already explored!");
+      this.showToast("All reachable frontier cells are already explored!", "info");
       return;
     }
     MapRenderer.selectCell(frontier.id);
@@ -1094,7 +1181,7 @@ const GameEngine = {
 
     // Check if player has enough sphere points
     if (s.spheres.development.current < primaryVal || s.spheres.leadership.current < secondaryVal) {
-      alert("Insufficient Sphere Power allocated! Lower your sliders.");
+      this.showToast("Insufficient Sphere Power allocated! Lower your sliders.", "warning");
       return;
     }
 
@@ -1155,13 +1242,182 @@ const GameEngine = {
   },
 
   // -------------------------------------------------------------
+  // TURN ADVANCE PRE-FLIGHT CHECKS & AUTOMATION HELPERS
+  // -------------------------------------------------------------
+  selectResearchTarget(techId) {
+    const s = this.state;
+    const tech = s.techTree.find(t => t.id === techId);
+    if (!tech || tech.researched) return;
+    s.activeTechId = techId;
+    if (s.spheres.research.current > 0) {
+      this.researchTech(techId);
+    } else {
+      this.showToast(`Auto-Research queued: ${tech.name}. Unspent Research will invest automatically each season.`, "info");
+      this.renderAll();
+    }
+  },
+
+  toggleAutomation(key) {
+    this.state.automation[key] = !this.state.automation[key];
+    const on = this.state.automation[key];
+    this.showToast(`Automation ${on ? "Enabled" : "Disabled"}`, "info");
+    this.renderAll();
+  },
+
+  calculateSeasonalDeltas() {
+    const s = this.state;
+    let prodFood = 0, prodPreserved = 0, prodWood = 0, prodMaterials = 0, prodFibers = 0;
+
+    s.locations.forEach(loc => {
+      loc.sites.forEach(site => {
+        const workers = this.getSiteWorkers(site.id);
+        if (workers > 0) {
+          const rawYield = Math.round(site.yieldAmount * workers * 1.15);
+          const amt = Math.min(site.extractionCap || 999, rawYield);
+          if (site.yieldType === "foodPerishable") prodFood += amt;
+          else if (site.yieldType === "foodPreserved") prodPreserved += amt;
+          else if (site.yieldType === "wood") prodWood += amt;
+          else if (site.yieldType === "materials") prodMaterials += amt;
+          else if (site.yieldType === "fibers") prodFibers += amt;
+        }
+      });
+    });
+
+    // Herd dairy
+    let dairyFood = 0;
+    s.herds.forEach(h => { dairyFood += Math.round(h.count * 1.8); });
+    prodFood += dairyFood;
+
+    // Autumn harvest
+    const farmingPops = s.pops.filter(p => p.workplaceId === "crop_field").length;
+    if (s.turn === s.cropField.harvestSeason && farmingPops > 0) {
+      prodFood += Math.round(Math.min(s.cropField.accumulatedYield, farmingPops * s.cropField.harvestPerWorker * 1.5));
+    }
+
+    const totalPops = s.pops.length;
+    const foodConsumed = totalPops * 5;
+    const waterConsumed = Math.round(totalPops * 1.5);
+    const woodFuel = s.turn === 3 ? Math.round(totalPops * 1.2) : 0;
+
+    const afterHarvestFood = s.resources.foodPerishable + prodFood;
+    const estSpoilage = Math.floor(afterHarvestFood * 0.45);
+    const netFood = prodFood - estSpoilage - foodConsumed;
+
+    return {
+      foodPerishable: { net: netFood, prod: prodFood, spoil: estSpoilage, cons: foodConsumed },
+      foodPreserved: { net: prodPreserved, prod: prodPreserved },
+      water: { net: -waterConsumed, cons: waterConsumed },
+      wood: { net: prodWood - woodFuel, prod: prodWood, cons: woodFuel },
+      materials: { net: prodMaterials, prod: prodMaterials },
+      fibers: { net: prodFibers, prod: prodFibers }
+    };
+  },
+
+  requestAdvanceSeason() {
+    const s = this.state;
+    const warnings = [];
+
+    // Check unspent Sphere points that refresh every season
+    const unspent = [];
+    for (const [key, sp] of Object.entries(s.spheres)) {
+      if (sp.current <= 0) continue;
+      // Exclude Research if Auto-Research is active and has an unfinished target
+      if (key === "research" && s.activeTechId) {
+        const t = s.techTree.find(x => x.id === s.activeTechId && !x.researched);
+        if (t) continue;
+      }
+      if (key === "culture" && s.automation.autoWorshipSpirit && s.resources.foodPerishable >= 25) continue;
+      unspent.push(`<strong>${sp.label}:</strong> ${sp.current} pts`);
+    }
+
+    if (unspent.length > 0) {
+      warnings.push(`<div style="margin-bottom:8px;"><strong>Unspent Recovering Sphere Points</strong> (lost when season refreshes):<br><span style="color:var(--accent-gold);">${unspent.join(" • ")}</span></div>`);
+    }
+
+    const isYearEnd = s.turn === 3;
+    const isDecadeEnd = isYearEnd && (s.year % 10 === 0);
+
+    if (isYearEnd) {
+      warnings.push(`<div style="margin-bottom:8px; color:#f85149;"><strong>&#x26A0; Annual Reckoning (End of Year ${s.year}):</strong> Unpreserved fresh food spoils further, weather shifts for Spring, herds breed, and a Major Cosmic Event will strike!</div>`);
+    }
+    if (isDecadeEnd) {
+      warnings.push(`<div style="color:var(--accent-purple);"><strong>&#x2728; Decennial Epoch (End of Decade ${Math.floor(s.year / 10)}):</strong> Tools & equipment suffer 10-year wear and require upkeep!</div>`);
+    }
+
+    if (warnings.length === 0) {
+      this.advanceSeason();
+      return;
+    }
+
+    const modal = document.getElementById("turn-warning-modal-overlay");
+    document.getElementById("turn-warn-tag").innerText = isDecadeEnd
+      ? "DECENNIAL & SEASON TRANSITION"
+      : isYearEnd
+        ? "ANNUAL & SEASON TRANSITION"
+        : "UNSPENT SPHERE POINTS WARNING";
+    document.getElementById("turn-warn-title").innerText = isYearEnd
+      ? `Prepare for Year ${s.year + 1}?`
+      : `End ${s.seasons[s.turn]} with unspent points?`;
+    document.getElementById("turn-warn-body").innerHTML = warnings.join("");
+    modal.classList.add("active");
+  },
+
+  confirmAdvanceSeason() {
+    const modal = document.getElementById("turn-warning-modal-overlay");
+    if (modal) modal.classList.remove("active");
+    this.advanceSeason();
+  },
+
+  cancelTurnWarning() {
+    const modal = document.getElementById("turn-warning-modal-overlay");
+    if (modal) modal.classList.remove("active");
+  },
+
+  // -------------------------------------------------------------
   // ADVANCE SEASON (CORE TURN LOOP WITH CONTINUOUS CALCULATIONS)
   // -------------------------------------------------------------
   advanceSeason() {
     const s = this.state;
-    const currentSeason = s.seasons[s.turn];
 
-    // 1. POP LABOR PRODUCTION AT SITES (across all claimed map cells)
+    // 0. SPHERE AUTOMATION BEFORE REFRESH
+    if (s.activeTechId && s.spheres.research.current > 0) {
+      const targetTech = s.techTree.find(t => t.id === s.activeTechId && !t.researched);
+      if (targetTech) {
+        const inv = Math.min(s.spheres.research.current, targetTech.cost - targetTech.progress);
+        s.spheres.research.current -= inv;
+        targetTech.progress += inv;
+        if (targetTech.progress >= targetTech.cost) {
+          targetTech.researched = true;
+          if (targetTech.id === "tech_ideograms") s.commandLimit += 2;
+          s.activeTechId = null;
+          this.showToast(`Auto-Research Mastered: ${targetTech.name}! Select next tech.`, "divine");
+          this.log(`AUTO-RESEARCH MASTERED: ${targetTech.name}! ${targetTech.desc}`, "log-divine");
+          this.recordAction(`Master ${targetTech.name}`, "research", `${inv} Res (Auto)`, "100%", "Divine", "Technology Mastered!");
+        } else {
+          this.log(`Auto-Research invested ${inv} into ${targetTech.name} (${targetTech.progress}/${targetTech.cost}).`);
+        }
+      }
+    }
+
+    if (s.automation.autoWorshipSpirit && s.spheres.culture.current >= 1 && s.resources.foodPerishable >= 25) {
+      s.spheres.culture.current -= 1;
+      s.resources.foodPerishable -= 20;
+      s.spirits[0].favor = Math.min(100, s.spirits[0].favor + 15);
+      s.magic.pools.water = Math.min(s.magic.capacities.water, s.magic.pools.water + 12);
+      this.log(`Auto-Tribute: Offered 20 food to Oshun (+15% Favor, +12 Water Mana).`, "log-divine");
+    }
+
+    if (s.automation.autoSealFood && s.resources.pottery >= 1 && s.resources.foodPerishable >= 10) {
+      const jarsToUse = Math.min(s.resources.pottery, Math.floor(s.resources.foodPerishable / 10));
+      if (jarsToUse > 0) {
+        s.resources.pottery -= jarsToUse;
+        s.resources.foodPerishable -= jarsToUse * 10;
+        s.resources.foodPreserved += jarsToUse * 10;
+        this.log(`Auto-Seal: Preserved ${jarsToUse * 10} food using ${jarsToUse} Clay Pottery Jars.`, "log-positive");
+      }
+    }
+
+    // 1. POP LABOR PRODUCTION AT SITES (Single source of truth via getSiteWorkers)
     let seasonFoodHarvested = 0;
     let seasonPreserved = 0;
     let seasonWoodGathered = 0;
@@ -1171,9 +1427,10 @@ const GameEngine = {
 
     s.locations.forEach(loc => {
       loc.sites.forEach(site => {
-        if (site.assignedPops > 0) {
+        const workers = this.getSiteWorkers(site.id);
+        if (workers > 0) {
           const toolBonus = 1.15;
-          const rawYield = Math.round(site.yieldAmount * site.assignedPops * toolBonus);
+          const rawYield = Math.round(site.yieldAmount * workers * toolBonus);
           const yieldGenerated = Math.min(site.extractionCap || 999, rawYield);
           if (site.yieldType === "foodPerishable") seasonFoodHarvested += yieldGenerated;
           else if (site.yieldType === "foodPreserved") seasonPreserved += yieldGenerated;
@@ -1195,34 +1452,30 @@ const GameEngine = {
     }
 
     // 2. CROPS (GRAIN) ACCUMULATION OR HARVEST
-    const farmingPops = s.pops.filter(p => p.workplace === "Crop Field").length;
+    const farmingPops = s.pops.filter(p => p.workplaceId === "crop_field").length;
     if (s.turn === s.cropField.harvestSeason) {
-      // AUTUMN HARVEST SEASON!
       const harvestYield = Math.min(s.cropField.accumulatedYield, farmingPops * s.cropField.harvestPerWorker * 1.5);
       s.resources.foodPerishable += Math.round(harvestYield);
-      s.cropField.accumulatedYield = 20; // reset to base
+      s.cropField.accumulatedYield = 20;
       this.log(`Autumn Harvest: Reaped ${Math.round(harvestYield)} grain from the cultivated fields!`, "log-positive");
     } else {
-      // Accumulate growth during non-harvest seasons
       const growth = farmingPops * s.cropField.growthRatePerFarmer;
       s.cropField.accumulatedYield = Math.min(s.cropField.maxYield, s.cropField.accumulatedYield + growth);
     }
 
-    // 3. HERD PRODUCTION & FODDER CONSUMPTION
+    // 3. HERD PRODUCTION
     s.herds.forEach(herd => {
       const milkYield = Math.round(herd.count * 1.8);
       s.resources.foodPerishable += milkYield;
     });
 
-    // 4. PERISHABLE FOOD HALVING (SEASONAL SPOILAGE)
+    // 4. PERISHABLE FOOD SPOILAGE (45%)
     const spoiledAmount = Math.floor(s.resources.foodPerishable * 0.45);
     s.resources.foodPerishable = Math.max(0, s.resources.foodPerishable - spoiledAmount);
 
     // 5. WINTER HEATING FUEL CONSUMPTION
-    let winterWarning = "";
-    if (s.turn === 3) { // Winter
+    if (s.turn === 3) {
       const popCount = s.pops.length;
-      // 1 wood per pop cohort base, cold modifier
       const fuelRequired = Math.round(popCount * 1.2);
       if (s.resources.wood >= fuelRequired) {
         s.resources.wood -= fuelRequired;
@@ -1230,15 +1483,14 @@ const GameEngine = {
       } else {
         const deficit = fuelRequired - s.resources.wood;
         s.resources.wood = 0;
-        s.telemetry.tension += 15;
+        s.telemetry.tension = Math.min(100, s.telemetry.tension + 15);
         s.pops.forEach(p => p.health = Math.max(30, p.health - 20));
-        winterWarning = `FREEZING WINTER! Wood shortage of ${deficit} fuel caused frostbite and unrest!`;
-        this.log(winterWarning, "log-negative");
+        this.showToast(`FREEZING WINTER! Wood shortage of ${deficit} fuel caused frostbite!`, "error");
+        this.log(`FREEZING WINTER! Wood shortage of ${deficit} fuel caused frostbite and unrest!`, "log-negative");
       }
     }
 
     // 6. POP NOURISHMENT CONSUMPTION
-    // Each pop consumes 5 food and 1 water per season (20/5 per year)
     const totalPops = s.pops.length;
     const foodConsumed = totalPops * 5;
     const waterConsumed = totalPops * 1.5;
@@ -1252,10 +1504,9 @@ const GameEngine = {
     }
     s.resources.water = Math.max(0, s.resources.water - waterConsumed);
 
-    // 7. DEMOGRAPHIC GROWTH RATE ACCUMULATION
-    // If diet is balanced and tribe has food surplus, advance population pool
+    // 7. DEMOGRAPHIC GROWTH
     const balancedDietPops = s.pops.filter(p => p.diet === "balanced").length;
-    const growthIncrement = (balancedDietPops * 0.08) * (1 - (totalPops / 15)); // carrying capacity factor
+    const growthIncrement = (balancedDietPops * 0.08) * (1 - (totalPops / 15));
     s.demographicGrowthPool += growthIncrement;
     if (s.demographicGrowthPool >= 1.0) {
       s.demographicGrowthPool -= 1.0;
@@ -1265,17 +1516,18 @@ const GameEngine = {
         name: `Hearth Group ${s.pops.length + 1}`,
         blood: s.tribe.bloodline,
         faction: "Harvesters",
-        locationId: "loc_janas",
-        workplace: "River Fishery",
+        locationId: s.world.startCellId,
+        workplaceId: "idle",
         housing: "Destitution",
         tools: [],
         health: 100,
         diet: "balanced"
       });
-      this.log(`Tribal Growth: A new population cohort of 100 souls has matured into productive labor!`, "log-positive");
+      this.showToast(`New Pop Cohort! Hearth Group ${s.pops.length} is ready for assignment.`, "success");
+      this.log(`Tribal Growth: A new population cohort of 100 souls matured (Unassigned).`, "log-positive");
     }
 
-    // 8. FACTION TENSION & REFRESH SPHERE POWER
+    // 8. REFRESH SPHERE POWER
     s.spheres.leadership.current = s.spheres.leadership.base + s.leader.socialSkill;
     s.spheres.development.current = s.spheres.development.base + 2;
     s.spheres.military.current = s.spheres.military.base + (s.factions[0].opinion > 50 ? 2 : 0);
@@ -1283,19 +1535,131 @@ const GameEngine = {
     s.spheres.research.current = s.spheres.research.base + (s.factions[3].opinion > 50 ? 2 : 0);
     s.spheres.commerce.current = s.spheres.commerce.base + (s.factions[2].opinion > 50 ? 3 : 1);
 
-    // 9. ADVANCE CALENDAR
+    // 9. ADVANCE CALENDAR + SEASONAL/ANNUAL/DECENNIAL EVENTS
     s.turn = (s.turn + 1) % 4;
     if (s.turn === 0) {
-      // NEW YEAR RECKONING!
+      const prevYear = s.year;
       s.year += 1;
+      if (prevYear % 10 === 0) {
+        s.decade += 1;
+        s.resources.materials = Math.max(0, s.resources.materials - 15);
+        this.log(`DECADE ${s.decade} DAWNS: Replaced worn tools and equipment (-15 Materials).`, "log-divine");
+      }
       this.resolveAnnualReckoning();
     } else {
-      // Dynamic seasonal weather fluctuation
       this.updateSeasonalWeather();
       this.log(`Season advanced to ${s.seasons[s.turn]}, Year ${s.year}.`);
+      this.triggerSeasonalMinorEvent();
     }
 
     this.renderAll();
+  },
+
+  triggerSeasonalMinorEvent() {
+    const s = this.state;
+    // 25% chance of major escalation mid-year if Tension or Entropy is high
+    if ((s.telemetry.tension > 65 || s.telemetry.entropy > 65) && Math.random() < 0.3) {
+      this.triggerAnnualEvent();
+      return;
+    }
+
+    const minorPool = [
+      {
+        tag: "SEASONAL EVENT • MINOR",
+        title: "Riverbank Driftwood & Reeds",
+        desc: "Seasonal currents washed dense tangled cedar logs and woven reeds ashore near the tribal camp.",
+        choices: [
+          {
+            text: "Gather timber for the hearths (+18 Wood, +10 Fibers)",
+            action: () => {
+              s.resources.wood += 18;
+              s.resources.fibers += 10;
+              this.log("Seasonal Event: Salvaged +18 Wood and +10 Fibers from the riverbanks.", "log-positive");
+            }
+          },
+          {
+            text: "Carve offerings to Oshun from the driftwood (+8% Spirit Favor, +6 Water Mana)",
+            action: () => {
+              s.spirits[0].favor = Math.min(100, s.spirits[0].favor + 8);
+              s.magic.pools.water = Math.min(50, s.magic.pools.water + 6);
+              this.log("Seasonal Event: Carved river totems for Oshun (+8% Favor, +6 Water Mana).", "log-divine");
+            }
+          }
+        ]
+      },
+      {
+        tag: "SEASONAL EVENT • MINOR",
+        title: "Flock of Migratory Waterfowl",
+        desc: "Hundreds of fat silver-winged geese have settled on the marsh reeds for the season.",
+        choices: [
+          {
+            text: "Dispatch fowlers with nets (+28 Fresh Food)",
+            action: () => {
+              s.resources.foodPerishable += 28;
+              this.log("Seasonal Event: Fowlers netted +28 Fresh Food from migrating waterfowl.", "log-positive");
+            }
+          },
+          {
+            text: "Preserve feathers & bones for craftsmen (+12 Materials, +8 Fibers)",
+            action: () => {
+              s.resources.materials += 12;
+              s.resources.fibers += 8;
+              this.log("Seasonal Event: Craftsmen gathered +12 Materials and +8 Fibers.", "log-positive");
+            }
+          }
+        ]
+      },
+      {
+        tag: "SEASONAL EVENT • MINOR",
+        title: "Minor Spoilage Mold Scare",
+        desc: "Damp air threatens part of your unsealed food baskets near the riverbank.",
+        choices: [
+          {
+            text: "Salvage what you can and feed the herds (-12 Fresh Food, +1 Goat Herd)",
+            action: () => {
+              s.resources.foodPerishable = Math.max(0, s.resources.foodPerishable - 12);
+              s.herds[0].count += 1;
+              this.log("Seasonal Event: Fed damp grain to the goats (-12 Fresh Food, +1 Goat).", "");
+            }
+          },
+          {
+            text: "Burn aromatic herbs to dry the granary (-6 Wood, +4 Research insight)",
+            action: () => {
+              s.resources.wood = Math.max(0, s.resources.wood - 6);
+              s.spheres.research.current += 1;
+              this.log("Seasonal Event: Smoke-dried the granary (-6 Wood, +1 Research).", "log-positive");
+            }
+          }
+        ]
+      },
+      {
+        tag: "SEASONAL EVENT • MINOR",
+        title: "Wandering Bone-Carver Arrives",
+        desc: "A solitary traveler bearing carved talismans and foreign stories seeks shelter for the season.",
+        choices: [
+          {
+            text: "Welcome them at the fire (-10 Fresh Food, +2 Culture & +1 Research)",
+            action: () => {
+              s.resources.foodPerishable = Math.max(0, s.resources.foodPerishable - 10);
+              s.spheres.culture.current += 2;
+              s.spheres.research.current += 1;
+              this.log("Seasonal Event: The wanderer shared legends (+2 Culture, +1 Research).", "log-divine");
+            }
+          },
+          {
+            text: "Trade stone flakes for their carved tools (+1 Pottery Jar, +6 Materials)",
+            action: () => {
+              s.resources.pottery += 1;
+              s.resources.materials += 6;
+              this.log("Seasonal Event: Bartered with the wanderer (+1 Pottery Jar, +6 Materials).", "log-positive");
+            }
+          }
+        ]
+      }
+    ];
+
+    const ev = minorPool[Math.floor(Math.random() * minorPool.length)];
+    this.showEventModal(ev);
   },
 
   // -------------------------------------------------------------
@@ -1534,7 +1898,7 @@ const GameEngine = {
     // Check costs
     for (const [res, amt] of Object.entries(craft.cost)) {
       if ((s.resources[res] || 0) < amt) {
-        alert(`Missing required ${res} (Need ${amt})`);
+        this.showToast(`Missing required ${res} (Need ${amt})`, "warning");
         return;
       }
     }
@@ -1547,13 +1911,9 @@ const GameEngine = {
     // Apply effect
     if (craftId === "craft_hammer") s.resources.tools = s.resources.tools || {};
     if (craftId === "craft_pottery") {
-      // Converts 10 perishable to preserved
-      const converted = Math.min(10, s.resources.foodPerishable);
-      s.resources.foodPerishable -= converted;
-      s.resources.foodPreserved += converted;
       s.resources.pottery += 1;
-      this.log(`Sealed ${converted} food into airtight clay pottery jars.`, "log-positive");
-      this.recordAction("Craft Pottery Jar", "commerce", "3 Mat, 1 Wood", "100%", "Success", `Sealed ${converted} food`);
+      this.log(`Crafted 1 Clay Preservation Jar (use in Stockpiles & Jars to seal 10 food).`, "log-positive");
+      this.recordAction("Craft Pottery Jar", "commerce", "3 Mat, 1 Wood", "100%", "Success", "+1 Clay Pottery Jar");
     } else if (craftId === "craft_hut") {
       s.locations[0].buildings[0].capacity += 1;
       this.log(`Constructed an additional insulated hut. Housing capacity increased to ${s.locations[0].buildings[0].capacity}.`, "log-positive");
@@ -1578,7 +1938,7 @@ const GameEngine = {
 
     const availableResearch = s.spheres.research.current;
     if (availableResearch <= 0) {
-      alert("No available Research Sphere power! Allocate research or please the Council of Elders.");
+      this.showToast("No Research points remaining this season! Select a tech for Auto-Research next season.", "info");
       return;
     }
 
@@ -1588,6 +1948,7 @@ const GameEngine = {
 
     if (tech.progress >= tech.cost) {
       tech.researched = true;
+      if (s.activeTechId === techId) s.activeTechId = null;
       if (tech.id === "tech_ideograms") {
         s.commandLimit += 2;
         this.log(`TECHNOLOGY MASTERED: ${tech.name}! Command Limit increased by +2 (now ${s.commandLimit}).`, "log-divine");
@@ -1596,6 +1957,7 @@ const GameEngine = {
         this.log(`TECHNOLOGY MASTERED: ${tech.name}! ${tech.desc}`, "log-divine");
         this.recordAction(`Master ${tech.name}`, "research", `${invested} Res`, "100%", "Divine", "Technology Mastered!");
       }
+      this.showToast(`Mastered ${tech.name}!`, "divine");
     } else {
       this.log(`Invested ${invested} Research points into ${tech.name} (${tech.progress}/${tech.cost}).`);
       this.recordAction(`Research ${tech.name}`, "research", `${invested} Res`, "100%", "Success", `Progress: ${tech.progress}/${tech.cost}`);
@@ -1653,6 +2015,8 @@ const GameEngine = {
 
   renderResourceStrip() {
     const r = this.state.resources;
+    const d = this.calculateSeasonalDeltas();
+
     document.getElementById("res-food-perishable").innerText = r.foodPerishable;
     document.getElementById("res-food-preserved").innerText = r.foodPreserved;
     document.getElementById("res-water").innerText = Math.round(r.water);
@@ -1661,6 +2025,32 @@ const GameEngine = {
     const fibEl = document.getElementById("res-fibers");
     if (fibEl) fibEl.innerText = r.fibers;
     document.getElementById("res-pottery").innerText = r.pottery;
+
+    const setDelta = (id, net) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerText = `${net >= 0 ? "+" : ""}${net}/ssn`;
+      el.className = `res-delta ${net > 0 ? "res-delta-pos" : net < 0 ? "res-delta-neg" : "res-delta-zero"}`;
+    };
+
+    setDelta("delta-food-perishable", d.foodPerishable.net);
+    setDelta("delta-food-preserved", d.foodPreserved.net);
+    setDelta("delta-water", d.water.net);
+    setDelta("delta-wood", d.wood.net);
+    setDelta("delta-materials", d.materials.net);
+    setDelta("delta-fibers", d.fibers.net);
+
+    // Update hover breakdown metadata dynamically
+    const foodBox = document.getElementById("res-box-food");
+    if (foodBox) foodBox.setAttribute("data-hover-meta", `Prod: +${d.foodPerishable.prod} • Eat: -${d.foodPerishable.cons} • Spoil: -${d.foodPerishable.spoil}`);
+    const waterBox = document.getElementById("res-box-water");
+    if (waterBox) waterBox.setAttribute("data-hover-meta", `Pop consumption: -${d.water.cons}/season`);
+    const woodBox = document.getElementById("res-box-wood");
+    if (woodBox) woodBox.setAttribute("data-hover-meta", `Prod: +${d.wood.prod} • Winter Burn: -${d.wood.cons}`);
+    const matBox = document.getElementById("res-box-materials");
+    if (matBox) matBox.setAttribute("data-hover-meta", `Prod: +${d.materials.prod}/season`);
+    const fibBox = document.getElementById("res-box-fibers");
+    if (fibBox) fibBox.setAttribute("data-hover-meta", `Prod: +${d.fibers.prod}/season`);
   },
 
   renderSphereDock() {
@@ -1922,11 +2312,24 @@ const GameEngine = {
     // 2. DEVELOPMENT
     if (sphereKey === "development") {
       if (subtab === "pops") {
-        const siteChoices = ["River Fishery", "Hardwood Grove", "River Clay Bank", "Crop Field", "Basic Workshop"];
+        // Unified options from all claimed map cells + capital Crop Field / Workshop + Idle
+        const startId = s.world ? s.world.startCellId : 0;
+        const jobOptions = [{ val: `${startId}|idle`, label: "Unassigned (Idle)" }];
+        s.locations.forEach(loc => {
+          loc.sites.forEach(st => {
+            jobOptions.push({ val: `${loc.cellId}|${st.id}`, label: `${loc.name} — ${st.name} (+${st.yieldAmount} ${st.yieldType})` });
+          });
+        });
+        jobOptions.push({ val: `${startId}|crop_field`, label: "Janas Valley — Crop Field (Sorghum)" });
+        jobOptions.push({ val: `${startId}|workshop`, label: "Janas Valley — Basic Workshop" });
+
+        const workingCount = s.pops.filter(p => p.workplaceId !== "idle").length;
+        const idleCount = s.pops.length - workingCount;
+
         return `
           <div class="grid-2" style="margin-bottom:10px;">
             <div class="card">
-              <div class="card-title">&#x1F465; Total Population: ${s.pops.length} Cohorts (~${s.pops.length * 100} souls)</div>
+              <div class="card-title">&#x1F465; Population: ${s.pops.length} Cohorts (${workingCount} Working, ${idleCount} Idle)</div>
             </div>
             <div class="card">
               <div class="card-title" style="color:var(--accent-green);">&#x1F331; Growth Progress: ${Math.round(s.demographicGrowthPool * 100)}% toward next Pop</div>
@@ -1935,23 +2338,25 @@ const GameEngine = {
           <div class="table-container">
             <table class="data-table">
               <thead>
-                <tr><th>Cohort</th><th>Faction</th><th>Workplace</th><th>Housing</th><th>Tools</th><th>Health</th></tr>
+                <tr><th>Cohort</th><th>Faction</th><th>Assigned Site / Workplace</th><th>Housing</th><th>Health</th></tr>
               </thead>
               <tbody>
-                ${s.pops.map(p => `
+                ${s.pops.map(p => {
+                  const curVal = `${p.locationId}|${p.workplaceId}`;
+                  return `
                   <tr>
                     <td><strong>${p.name}</strong></td>
                     <td>${p.faction}</td>
                     <td>
-                      <select style="background:var(--bg-tertiary); color:#fff; border:1px solid var(--border-color); border-radius:4px; padding:2px 5px; font-size:11px;" onchange="GameEngine.reassignPop('${p.id}', this.value)">
-                        ${siteChoices.map(sc => `<option value="${sc}" ${p.workplace === sc ? "selected" : ""}>${sc}</option>`).join("")}
+                      <select style="background:var(--bg-tertiary); color:#fff; border:1px solid var(--border-color); border-radius:4px; padding:3px 6px; font-size:11px; max-width:250px;" onchange="GameEngine.reassignPop('${p.id}', this.value)">
+                        ${jobOptions.map(opt => `<option value="${opt.val}" ${curVal === opt.val ? "selected" : ""}>${opt.label}</option>`).join("")}
                       </select>
                     </td>
                     <td><span class="chip ${p.housing === 'Hut' ? 'chip-green' : 'chip-red'}">${p.housing}</span></td>
-                    <td>${p.tools.length ? p.tools.join(", ") : "None"}</td>
                     <td><strong style="color:${p.health >= 80 ? 'var(--accent-green)' : 'var(--accent-red)'}">${p.health}%</strong></td>
                   </tr>
-                `).join("")}
+                `;
+                }).join("")}
               </tbody>
             </table>
           </div>
@@ -2055,8 +2460,14 @@ const GameEngine = {
             <div style="font-size:11px; background:rgba(248,81,73,0.1); border-left:3px solid var(--accent-red); padding:8px; border-radius:4px; margin-bottom:10px;">
               <strong>Divine Taboo:</strong> ${sp.taboos}
             </div>
-            <button class="btn btn-primary" onclick="GameEngine.offerFoodSacrifice()"
-              data-hover-tag="WORSHIP • CULTURE" data-hover-title="Offer River Sacrifice" data-hover-desc="Appeases Oshun of the Jade Waters to gain Favor, Water Mana, Shamans support, and lower Entropy." data-hover-meta="Cost: 1 Culture, 20 Fresh Food">&#x1F525; Offer River Sacrifice (1 Culture, 20 Food)</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <button class="btn btn-primary" onclick="GameEngine.offerFoodSacrifice()"
+                data-hover-tag="WORSHIP • CULTURE" data-hover-title="Offer River Sacrifice" data-hover-desc="Appeases Oshun of the Jade Waters to gain Favor, Water Mana, Shamans support, and lower Entropy." data-hover-meta="Cost: 1 Culture, 20 Fresh Food">&#x1F525; Offer River Sacrifice (1 Culture, 20 Food)</button>
+              <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); cursor:pointer;">
+                <input type="checkbox" ${s.automation.autoWorshipSpirit ? "checked" : ""} onchange="GameEngine.toggleAutomation('autoWorshipSpirit')">
+                Auto-Tribute each season (1 Cul + 20 Food)
+              </label>
+            </div>
           </div>
         `;
       }
@@ -2096,27 +2507,37 @@ const GameEngine = {
     if (sphereKey === "research") {
       const exploredCount = s.world ? s.world.cells.filter(c => c.explored).length : 0;
       const totalCount = s.world ? s.world.cells.length : 0;
+      const activeTech = s.techTree.find(t => t.id === s.activeTechId && !t.researched);
       return `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:var(--bg-tertiary); padding:8px 12px; border-radius:6px;">
-          <span style="font-size:12px;">World Charted: <strong>${exploredCount} / ${totalCount} regions</strong></span>
-          <button class="btn btn-primary" onclick="GameEngine.focusNearestFrontier()">&#x1F9ED; Locate Nearest Uncharted Frontier</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:var(--bg-tertiary); padding:8px 12px; border-radius:6px; flex-wrap:wrap; gap:8px;">
+          <span style="font-size:12px;">
+            Auto-Research Target: <strong style="color:var(--accent-blue);">${activeTech ? activeTech.name : "None Selected"}</strong> •
+            World: <strong>${exploredCount}/${totalCount}</strong>
+          </span>
+          <button class="btn btn-primary" onclick="GameEngine.focusNearestFrontier()"
+            data-hover-tag="EXPLORATION" data-hover-title="Locate Nearest Frontier" data-hover-desc="Centers the map on an uncharted region bordering your known lands." data-hover-meta="Ready to scout">&#x1F9ED; Locate Nearest Frontier</button>
         </div>
         <div class="grid-2">
-          ${s.techTree.map(tech => `
-            <div class="card">
+          ${s.techTree.map(tech => {
+            const isSelected = s.activeTechId === tech.id && !tech.researched;
+            return `
+            <div class="card" style="${isSelected ? 'border-color:var(--accent-blue); box-shadow:0 0 12px rgba(88,166,255,0.2);' : ''}">
               <div class="card-header">
                 <span class="card-title">${tech.name}</span>
-                <span class="chip ${tech.researched ? 'chip-green' : 'chip-gold'}">${tech.researched ? "MASTERED" : `${tech.progress}/${tech.cost}`}</span>
+                <span class="chip ${tech.researched ? 'chip-green' : isSelected ? 'chip-blue' : 'chip-gold'}">${tech.researched ? "MASTERED" : isSelected ? `AUTO (${tech.progress}/${tech.cost})` : `${tech.progress}/${tech.cost}`}</span>
               </div>
               <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${tech.desc}</p>
               ${
                 tech.researched
                   ? `<button class="btn" disabled>Researched</button>`
-                  : `<button class="btn btn-primary" onclick="GameEngine.researchTech('${tech.id}')"
-                      data-hover-tag="INNOVATION • RESEARCH" data-hover-title="Research ${tech.name}" data-hover-desc="${tech.desc}" data-hover-meta="Progress: ${tech.progress}/${tech.cost} • Spends available Research">Invest Research</button>`
+                  : `<div style="display:flex; gap:6px;">
+                      <button class="btn ${isSelected ? 'btn-primary' : ''}" onclick="GameEngine.selectResearchTarget('${tech.id}')"
+                        data-hover-tag="AUTO-RESEARCH" data-hover-title="Set ${tech.name} as Active Research" data-hover-desc="Automatically funnels all unspent Research points into ${tech.name} every season until mastered." data-hover-meta="Progress: ${tech.progress}/${tech.cost}">${isSelected ? "&#x2714; Active Auto-Target" : "Set Auto-Research"}</button>
+                     </div>`
               }
             </div>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
       `;
     }
@@ -2148,8 +2569,14 @@ const GameEngine = {
             <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
               Fresh Food decays by 45% each season. Seal 10 Fresh Food inside a Clay Pottery Jar so it never spoils.
             </p>
-            <button class="btn btn-primary" onclick="GameEngine.preserveFoodWithPottery()"
-              data-hover-tag="LOGISTICS • COMMERCE" data-hover-title="Seal Food in Clay Jar" data-hover-desc="Converts perishable food into permanent rations exempt from the -45% seasonal spoilage loss." data-hover-meta="Cost: 1 Pottery Jar, 10 Fresh Food">Seal 10 Food (Costs 1 Pottery Jar)</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <button class="btn btn-primary" onclick="GameEngine.preserveFoodWithPottery()"
+                data-hover-tag="LOGISTICS • COMMERCE" data-hover-title="Seal Food in Clay Jar" data-hover-desc="Converts perishable food into permanent rations exempt from the -45% seasonal spoilage loss." data-hover-meta="Cost: 1 Pottery Jar, 10 Fresh Food">Seal 10 Food (Costs 1 Pottery Jar)</button>
+              <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); cursor:pointer;">
+                <input type="checkbox" ${s.automation.autoSealFood ? "checked" : ""} onchange="GameEngine.toggleAutomation('autoSealFood')">
+                Auto-Seal with spare Jars each season
+              </label>
+            </div>
           </div>
           <div class="grid-4">
             ${[

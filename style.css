@@ -898,3 +898,66 @@ table.data-table td {
   border-top: 1px solid var(--border-color);
 }
 
+/* ==========================================================================
+   NON-BLOCKING TOAST NOTIFICATIONS & RESOURCE DELTAS
+   ========================================================================== */
+#toast-container {
+  position: fixed;
+  top: 86px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2000;
+  pointer-events: none;
+  max-width: 340px;
+}
+.toast-item {
+  background: rgba(16, 21, 29, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-highlight);
+  border-left: 4px solid var(--accent-gold);
+  color: var(--text-main);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  pointer-events: auto;
+  cursor: pointer;
+  animation: toastSlideIn 0.2s ease-out;
+}
+.toast-item.toast-error { border-left-color: var(--accent-red); }
+.toast-item.toast-warning { border-left-color: var(--accent-amber); }
+.toast-item.toast-success { border-left-color: var(--accent-green); }
+.toast-item.toast-divine { border-left-color: var(--accent-purple); }
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.res-delta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.res-delta-pos { color: var(--accent-green); background: rgba(63, 185, 80, 0.12); }
+.res-delta-neg { color: var(--accent-red); background: rgba(248, 81, 73, 0.12); }
+.res-delta-zero { color: var(--text-dim); }
+
+/* TURN WARNING CONFIRMATION MODAL */
+#turn-warning-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 9, 14, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 1050;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#turn-warning-modal-overlay.active { display: flex; }
+
+
