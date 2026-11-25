@@ -227,7 +227,10 @@ const GameState = {
   // Chronicle & Historical Log
   chronicle: [
     { season: "Spring", year: 1, text: "Kiwele assumes the chieftain mantle of the Janas Clan. The river flows high with silver fish.", type: "log-positive" }
-  ]
+  ],
+
+  // Structured Action Tracker across all seasons
+  actionHistory: []
 };
 
 // --- SIMULATION & GAME ENGINE CONTROLLER ---
@@ -238,6 +241,7 @@ const GameEngine = {
     this.initWorld("Janas-Dawn", "river_basin");
     this.renderAll();
     this.setupEventListeners();
+    this.renderTutorial();
     this.log("The council convenes. Explore the frontier on the World Map and guide the tribe.", "log-divine");
   },
 
@@ -331,7 +335,8 @@ const GameEngine = {
         </div>
         ${
           isAdjacentToExplored
-            ? `<button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px;" onclick="GameEngine.exploreCell(${cell.id})" ${researchAvail < 1 ? "disabled" : ""}>
+            ? `<button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px;" onclick="GameEngine.exploreCell(${cell.id})" ${researchAvail < 1 ? "disabled" : ""}
+                data-hover-tag="EXPEDITION • RESEARCH" data-hover-title="Dispatch Scouts" data-hover-desc="Sends tribal scouts beyond your borders to lift Fog of War and reveal biomes, rivers, anomalies, and resources." data-hover-meta="Cost: 1 Research • Odds: ${scoutProb}%">
                 &#x1F9ED; Dispatch Scouts (1 Research)
                </button>`
             : `<div class="chip chip-red" style="text-align:center; padding:8px;">Too far! Scout an adjacent frontier region first.</div>`
@@ -395,12 +400,14 @@ const GameEngine = {
       } else if (claimedCount >= this.state.commandLimit) {
         actionButtons += `<div class="chip chip-red" style="text-align:center; padding:6px;">Command Limit Reached (${claimedCount}/${this.state.commandLimit}). Research Ideograms to expand!</div>`;
       } else {
-        actionButtons += `<button class="btn btn-primary" style="width:100%; justify-content:center; padding:9px;" onclick="GameEngine.claimCell(${cell.id})">&#x1F3F4; Claim Territory (2 Development)</button>`;
+        actionButtons += `<button class="btn btn-primary" style="width:100%; justify-content:center; padding:9px;" onclick="GameEngine.claimCell(${cell.id})"
+          data-hover-tag="EXPANSION • DEVELOPMENT" data-hover-title="Claim Territory" data-hover-desc="Incorporates this region into the Janas Clan realm so your pops can harvest its sites and cultivate fields." data-hover-meta="Cost: 2 Development • Uses 1 Command Limit">&#x1F3F4; Claim Territory (2 Development)</button>`;
       }
     }
 
     if (cell.owner === "player" && !cell.hasRoad && cell.id !== w.startCellId) {
-      actionButtons += `<button class="btn" style="width:100%; justify-content:center;" onclick="GameEngine.buildRoad(${cell.id})">&#x1F6E4; Build Dirt Road (10 Wood, 1 Dev)</button>`;
+      actionButtons += `<button class="btn" style="width:100%; justify-content:center;" onclick="GameEngine.buildRoad(${cell.id})"
+        data-hover-tag="INFRASTRUCTURE" data-hover-title="Build Dirt Road" data-hover-desc="Connects this outpost to your capital network for free population migration and military redeployment." data-hover-meta="Cost: 10 Wood, 1 Development">&#x1F6E4; Build Dirt Road (10 Wood, 1 Dev)</button>`;
     }
 
     if (cell.anomaly) {
@@ -408,7 +415,8 @@ const GameEngine = {
         <div style="background:rgba(188,140,255,0.12); border:1px solid var(--accent-purple); padding:10px; border-radius:6px; font-size:12px;">
           <strong style="color:var(--accent-purple);">&#x2728; Anomaly: ${cell.anomaly}</strong>
           <p style="color:var(--text-muted); margin:4px 0 8px;">Investigating ancient anomalies risks cosmic entropy, but grants rare relics or mana.</p>
-          <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="GameEngine.investigateAnomaly(${cell.id})">Investigate Anomaly (2 Culture)</button>
+          <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="GameEngine.investigateAnomaly(${cell.id})"
+            data-hover-tag="DIVINE MYSTERY • CULTURE" data-hover-title="Investigate Anomaly" data-hover-desc="Channels ritual lore into an ancient relic site to extract Arcane & Life mana plus Research insights." data-hover-meta="Cost: 2 Culture • +12% Entropy">Investigate Anomaly (2 Culture)</button>
         </div>
       `;
     }
@@ -418,8 +426,10 @@ const GameEngine = {
         <div style="background:rgba(248,81,73,0.12); border:1px solid var(--accent-red); padding:10px; border-radius:6px; font-size:12px;">
           <strong style="color:var(--accent-red);">&#x2694; ${rival.name} (${rival.attitude})</strong>
           <div style="display:flex; gap:6px; margin-top:8px;">
-            <button class="btn" style="flex:1; justify-content:center;" onclick="GameEngine.tradeWithRival(${cell.id})">&#x1F91D; Barter (1 Com)</button>
-            <button class="btn btn-danger" style="flex:1; justify-content:center;" onclick="GameEngine.raidRival(${cell.id})">&#x2694; Raid (2 Mil)</button>
+            <button class="btn" style="flex:1; justify-content:center;" onclick="GameEngine.tradeWithRival(${cell.id})"
+              data-hover-tag="DIPLOMACY • COMMERCE" data-hover-title="Send Barter Caravan" data-hover-desc="Exchanges crafted Pottery jars with this rival tribe for preserved rations and raw materials." data-hover-meta="Cost: 1 Commerce, 3 Pottery">&#x1F91D; Barter (1 Com)</button>
+            <button class="btn btn-danger" style="flex:1; justify-content:center;" onclick="GameEngine.raidRival(${cell.id})"
+              data-hover-tag="WARFARE • MILITARY" data-hover-title="Launch Tribal Raid" data-hover-desc="Dispatches warbands to plunder materials and hides. Risks casualties and higher tribal Tension." data-hover-meta="Cost: 2 Military • Power-weighted odds">&#x2694; Raid (2 Mil)</button>
           </div>
         </div>
       `;
@@ -489,11 +499,13 @@ const GameEngine = {
         }
       }
       this.log(`Charted ${cell.name} (${cell.biomeName})${cell.anomaly ? " — ANOMALY DETECTED!" : ""}`, cell.anomaly ? "log-divine" : "log-positive");
+      this.recordAction(`Scout ${cell.name}`, "research", "1 Res", `${Math.round(prob * 100)}%`, "Success", `Revealed ${cell.biomeName}`);
       MapRenderer.render();
       this.onMapCellSelected(cellId);
     } else {
       s.telemetry.tension = MathUtils.clamp(s.telemetry.tension + 3, 0, 100);
       this.log(`Scouts turned back by harsh terrain near region #${cell.id}.`, "log-negative");
+      this.recordAction(`Scout Region #${cell.id}`, "research", "1 Res", `${Math.round(prob * 100)}%`, "Failed", "Turned back (+3% Tension)");
     }
     this.renderAll();
   },
@@ -517,6 +529,7 @@ const GameEngine = {
     cell.owner = "player";
     this.syncLocationsFromWorld();
     this.log(`Territory Claimed: ${cell.name} (${cell.biomeName}) is now part of the Janas realm!`, "log-positive");
+    this.recordAction(`Claim ${cell.name}`, "development", "2 Dev", "100%", "Success", `Added ${cell.biomeName} to realm`);
     MapRenderer.render();
     this.onMapCellSelected(cellId);
     this.renderAll();
@@ -536,6 +549,7 @@ const GameEngine = {
     // Also ensure capital has road flag for visual link
     s.world.cells[s.world.startCellId].hasRoad = true;
     this.log(`Dirt Road Constructed: ${cell.name} is now connected for free pop & troop transit.`, "log-positive");
+    this.recordAction(`Road to ${cell.name}`, "development", "1 Dev, 10 Wood", "100%", "Success", "Linked to road network");
     MapRenderer.render();
     this.onMapCellSelected(cellId);
     this.renderAll();
@@ -557,6 +571,7 @@ const GameEngine = {
     s.magic.pools.life = Math.min(50, s.magic.pools.life + 10);
     s.spheres.research.current += 3;
     this.log(`ANOMALY UNLOCKED (${anomalyName}): Gained +18 Arcane Mana, +10 Life Mana, and +3 Research! Entropy surged.`, "log-divine");
+    this.recordAction(`Investigate ${anomalyName}`, "culture", "2 Cul", "100%", "Divine", "+28 Mana, +3 Res, +12% Entropy");
     MapRenderer.render();
     this.onMapCellSelected(cellId);
     this.renderAll();
@@ -573,6 +588,7 @@ const GameEngine = {
     s.resources.foodPreserved += 25;
     s.resources.materials += 12;
     this.log(`Caravan Barter: Traded 3 Pottery for 25 Preserved Food and 12 Stone/Copper!`, "log-positive");
+    this.recordAction("Rival Caravan Barter", "commerce", "1 Com, 3 Pottery", "100%", "Success", "+25 Preserved Food, +12 Materials");
     this.renderAll();
   },
 
@@ -590,10 +606,12 @@ const GameEngine = {
       s.resources.hides += 10;
       s.telemetry.tension = MathUtils.clamp(s.telemetry.tension + 10, 0, 100);
       this.log(`Raid Victorious! Janas warriors plundered 22 Materials and 10 Hides.`, "log-positive");
+      this.recordAction("Raid Rival Clan", "military", "2 Mil", `${Math.round(winProb * 100)}%`, "Success", "+22 Materials, +10 Hides");
     } else {
       if (s.military[0]) s.military[0].health = Math.max(25, s.military[0].health - 25);
       s.telemetry.tension = MathUtils.clamp(s.telemetry.tension + 14, 0, 100);
       this.log(`Raid Repulsed! Warriors retreated with heavy casualties.`, "log-negative");
+      this.recordAction("Raid Rival Clan", "military", "2 Mil", `${Math.round(winProb * 100)}%`, "Failed", "-25% Unit Health, +14% Tension");
     }
     this.renderAll();
   },
@@ -615,18 +633,164 @@ const GameEngine = {
       return;
     }
     site.assignedPops = Math.max(0, site.assignedPops + delta);
+    this.recordAction(`${delta > 0 ? "Assign" : "Unassign"} Labor: ${site.name}`, "development", "Free", "100%", "Success", `Workers: ${site.assignedPops}`);
     this.onMapCellSelected(cellId);
     this.renderAll();
   },
 
   activeSphere: null,
   activeSubtab: null,
+  tutorialStep: 0,
+
+  TUTORIAL_STEPS: [
+    {
+      tag: "STEP 1 OF 4 • THE LIVING WORLD",
+      title: "Welcome, Chieftain of the Janas Clan",
+      body: "The interactive Voronoi world map is your main command screen. Drag anywhere to pan, scroll to zoom, and click any region to view its terrain, climate, and natural sites in the right-hand Region Inspector. Rivers double agricultural fertility!"
+    },
+    {
+      tag: "STEP 2 OF 4 • EXPLORE & EXPAND",
+      title: "Lift the Fog of War",
+      body: "Distant lands are veiled in Fog of War. Click any darkened border region and spend Research to Dispatch Scouts. Once revealed, spend Development to Claim neighboring territory up to your Command Limit, or investigate purple Anomalies."
+    },
+    {
+      tag: "STEP 3 OF 4 • THE 6 EMBEDDED SPHERES",
+      title: "Rule Through Embedded Menus",
+      body: "Use the 6-Sphere Dock at the bottom (Leadership, Development, Military, Culture, Research, Commerce) to open embedded drawers directly over the map. Hover over any button to pop out a detailed highlight box, and check the top-left Action Ledger to track every move."
+    },
+    {
+      tag: "STEP 4 OF 4 • SEASONS & DIVINE CHAOS",
+      title: "Survive Spoilage, Winter & Spirits",
+      body: "Click 'End Season' to advance time. Fresh Food loses 45% to spoilage every season unless sealed in Clay Pottery Jars. Winter burns Wood for warmth. Watch Tension and Entropy gauges—pushing them too high triggers chaotic divine singularities!"
+    }
+  ],
 
   setupEventListeners() {
     // Next Turn button
     document.getElementById("btn-end-turn").addEventListener("click", () => {
       this.advanceSeason();
     });
+    this.setupHoverCards();
+  },
+
+  setupHoverCards() {
+    if (this._hoverBound) return;
+    this._hoverBound = true;
+    const card = document.getElementById("activity-hover-card");
+    if (!card) return;
+
+    const positionCard = (e) => {
+      const pad = 16;
+      const cardW = 265;
+      const cardH = card.offsetHeight || 130;
+      let left = e.clientX + 16;
+      let top = e.clientY + 16;
+      if (left + cardW > window.innerWidth - pad) left = e.clientX - cardW - 16;
+      if (top + cardH > window.innerHeight - pad) top = e.clientY - cardH - 16;
+      card.style.left = `${Math.max(8, left)}px`;
+      card.style.top = `${Math.max(8, top)}px`;
+    };
+
+    document.addEventListener("mouseover", (e) => {
+      const target = e.target.closest("[data-hover-title]");
+      if (!target) return;
+      document.getElementById("hover-card-tag").innerText = target.getAttribute("data-hover-tag") || "ACTIVITY";
+      document.getElementById("hover-card-title").innerText = target.getAttribute("data-hover-title") || "";
+      document.getElementById("hover-card-desc").innerText = target.getAttribute("data-hover-desc") || "";
+      const meta = target.getAttribute("data-hover-meta") || "";
+      const metaEl = document.getElementById("hover-card-meta");
+      metaEl.innerText = meta;
+      metaEl.style.display = meta ? "block" : "none";
+      card.classList.add("visible");
+      positionCard(e);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (card.classList.contains("visible")) {
+        positionCard(e);
+      }
+    });
+
+    document.addEventListener("mouseout", (e) => {
+      const from = e.target.closest("[data-hover-title]");
+      if (!from) return;
+      const to = e.relatedTarget ? e.relatedTarget.closest("[data-hover-title]") : null;
+      if (from !== to) {
+        card.classList.remove("visible");
+      }
+    });
+  },
+
+  toggleActionTracker() {
+    const widget = document.getElementById("action-tracker-widget");
+    const btn = document.getElementById("btn-toggle-tracker");
+    if (!widget || !btn) return;
+    widget.classList.toggle("collapsed");
+    btn.innerHTML = widget.classList.contains("collapsed") ? "+" : "&#x2212;";
+  },
+
+  recordAction(name, sphere, cost, odds, outcome, effect) {
+    const s = this.state;
+    s.actionHistory.unshift({
+      id: s.actionHistory.length + 1,
+      season: s.seasons[s.turn],
+      year: s.year,
+      turnIndex: s.year * 4 + s.turn,
+      name,
+      sphere,
+      cost,
+      odds,
+      outcome,
+      effect
+    });
+  },
+
+  openTutorial(step = 0) {
+    this.tutorialStep = Math.max(0, Math.min(this.TUTORIAL_STEPS.length - 1, step));
+    const overlay = document.getElementById("tutorial-modal-overlay");
+    if (overlay) overlay.classList.add("active");
+    this.renderTutorial();
+  },
+
+  closeTutorial() {
+    const overlay = document.getElementById("tutorial-modal-overlay");
+    if (overlay) overlay.classList.remove("active");
+  },
+
+  stepTutorial(delta) {
+    const next = this.tutorialStep + delta;
+    if (next >= this.TUTORIAL_STEPS.length) {
+      this.closeTutorial();
+      return;
+    }
+    this.tutorialStep = Math.max(0, next);
+    this.renderTutorial();
+  },
+
+  renderTutorial() {
+    const step = this.TUTORIAL_STEPS[this.tutorialStep];
+    if (!step) return;
+    const tagEl = document.getElementById("tutorial-step-tag");
+    const titleEl = document.getElementById("tutorial-step-title");
+    const bodyEl = document.getElementById("tutorial-step-body");
+    const dotsEl = document.getElementById("tutorial-dots");
+    const prevBtn = document.getElementById("btn-tut-prev");
+    const nextBtn = document.getElementById("btn-tut-next");
+
+    if (tagEl) tagEl.innerText = step.tag;
+    if (titleEl) titleEl.innerText = step.title;
+    if (bodyEl) bodyEl.innerText = step.body;
+    if (dotsEl) {
+      dotsEl.innerHTML = this.TUTORIAL_STEPS.map((_, idx) =>
+        `<span class="tutorial-dot ${idx === this.tutorialStep ? "active" : ""}"></span>`
+      ).join("");
+    }
+    if (prevBtn) prevBtn.disabled = this.tutorialStep === 0;
+    if (nextBtn) {
+      nextBtn.innerHTML = this.tutorialStep === this.TUTORIAL_STEPS.length - 1
+        ? "Begin Ruling &#x1F451;"
+        : "Next &#x2192;";
+    }
   },
 
   toggleInspector() {
@@ -701,6 +865,7 @@ const GameEngine = {
     s.factions.forEach(f => f.opinion = Math.min(100, f.opinion + 8));
     s.telemetry.tension = Math.max(0, s.telemetry.tension - 10);
     this.log("Council Feast Held: All factions gained +8 Opinion and tribal Tension dropped by 10%.", "log-positive");
+    this.recordAction("Host Council Feast", "leadership", "1 Lead, 25 Food", "100%", "Success", "+8% All Factions, -10% Tension");
     this.renderAll();
   },
 
@@ -713,6 +878,7 @@ const GameEngine = {
     s.spheres.leadership.current -= 2;
     s.telemetry.tension = Math.max(0, s.telemetry.tension - 15);
     this.log("Law Decreed: Chieftain Kiwele enforced the Accord of the Hearth (-15% Tension).", "log-positive");
+    this.recordAction("Decree Peace Accord", "leadership", "2 Lead", "100%", "Success", "-15% Tension");
     this.renderAll();
   },
 
@@ -721,6 +887,7 @@ const GameEngine = {
     if (!pop) return;
     pop.workplace = newWorkplace;
     this.log(`Reassigned ${pop.name} to ${newWorkplace}.`);
+    this.recordAction(`Reassign ${pop.name}`, "development", "Free", "100%", "Success", `Moved to ${newWorkplace}`);
     this.renderAll();
   },
 
@@ -737,6 +904,7 @@ const GameEngine = {
     s.resources.foodPerishable += meat;
     s.resources.hides += hides;
     this.log(`Butchered ${count} ${herd.species}, yielding +${meat} Fresh Food and +${hides} Hides.`, "log-positive");
+    this.recordAction(`Slaughter ${count} Goats`, "development", "Free", "100%", "Success", `+${meat} Food, +${hides} Hides`);
     this.renderAll();
   },
 
@@ -749,6 +917,7 @@ const GameEngine = {
     s.spheres.development.current -= 2;
     s.herds[0].count += 3;
     this.log("Pastoral Expansion: Corralled 3 wild horned goats into the tribe's herd.", "log-positive");
+    this.recordAction("Tame Wild Goats", "development", "2 Dev", "100%", "Success", "+3 Herd Animals");
     this.renderAll();
   },
 
@@ -774,6 +943,7 @@ const GameEngine = {
     });
     s.factions[0].opinion = Math.min(100, s.factions[0].opinion + 10);
     this.log("Regiment Mobilized: Trained new River Spearmen (+10 Spear Warriors Opinion).", "log-positive");
+    this.recordAction("Train River Spearmen", "military", "1 Mil, 10 Mat, 12 Wood", "100%", "Success", "+1 Unit (Power 14)");
     this.renderAll();
   },
 
@@ -797,6 +967,7 @@ const GameEngine = {
     }
     s.telemetry.tension = Math.max(0, s.telemetry.tension - 5);
     this.log("Defenses Constructed: Raised Timber Palisades around Janas Valley.", "log-positive");
+    this.recordAction("Raise Timber Palisade", "military", "1 Mil, 15 Wood", "100%", "Success", "+15 Defense, -5% Tension");
     this.renderAll();
   },
 
@@ -813,6 +984,7 @@ const GameEngine = {
     s.telemetry.entropy = Math.max(0, s.telemetry.entropy - 5);
     s.factions[1].opinion = Math.min(100, s.factions[1].opinion + 10);
     this.log("Sacred Offering: Oshun accepted 20 food (+15% Favor, +12 Water Mana, +10 Shamans Opinion).", "log-divine");
+    this.recordAction("Offer River Sacrifice", "culture", "1 Cul, 20 Food", "100%", "Divine", "+15% Favor, +12 Water Mana");
     this.renderAll();
   },
 
@@ -831,14 +1003,17 @@ const GameEngine = {
       s.cropField.accumulatedYield = Math.min(s.cropField.maxYield, s.cropField.accumulatedYield + 75);
       s.weather.moisture = Math.min(100, s.weather.moisture + 20);
       this.log("SPELL CAST: Drying Rain Invocation! Sorghum yield surged by +75.", "log-divine");
+      this.recordAction(`Cast ${spell.name}`, "culture", `${spell.cost} ${spell.manaType}`, "100%", "Divine", "+75 Crop Yield, +20% Moisture");
     } else if (spellId === "spell_fertility") {
       s.herds[0].count += 2;
       s.demographicGrowthPool += 0.25;
       this.log("SPELL CAST: Earth Mother's Bloom! Herds grew by +2 and demographic growth surged +25%.", "log-divine");
+      this.recordAction(`Cast ${spell.name}`, "culture", `${spell.cost} ${spell.manaType}`, "100%", "Divine", "+2 Herd, +25% Pop Growth");
     } else if (spellId === "spell_ward") {
       s.telemetry.tension = Math.max(0, s.telemetry.tension - 10);
       s.pops.forEach(p => p.health = Math.min(100, p.health + 15));
       this.log("SPELL CAST: Ward of the Smoldering Hearth! Tribal health restored and Tension eased.", "log-divine");
+      this.recordAction(`Cast ${spell.name}`, "culture", `${spell.cost} ${spell.manaType}`, "100%", "Divine", "+15% Pop Health, -10% Tension");
     }
     this.renderAll();
   },
@@ -853,6 +1028,7 @@ const GameEngine = {
     s.resources.foodPerishable -= 10;
     s.resources.foodPreserved += 10;
     this.log("Food Preserved: Sealed 10 Fresh Food inside a clay jar against spoilage.", "log-positive");
+    this.recordAction("Seal Food in Pottery", "commerce", "1 Pottery, 10 Food", "100%", "Success", "+10 Preserved Food");
     this.renderAll();
   },
 
@@ -937,6 +1113,10 @@ const GameEngine = {
     const prob = MathUtils.sigmoid(effectivePower - baselineDiff, 0.45);
     const roll = Math.random();
 
+    const actionLabel = actionSelect.options[actionSelect.selectedIndex].text.split("(")[0].trim();
+    const costLabel = `${primaryVal} Dev, ${secondaryVal} Lead`;
+    const oddsPct = `${Math.round(prob * 100)}%`;
+
     if (roll < prob) {
       // Success!
       if (actionType === "explore") {
@@ -944,25 +1124,31 @@ const GameEngine = {
         s.resources.fibers += 12;
         s.telemetry.entropy += 2;
         this.log(`Exploration Triumph! Scouts mapped the Outer Ridge, discovering 15 Stone and 12 Fibers.`, "log-positive");
+        this.recordAction(actionLabel, "development", costLabel, oddsPct, "Success", "+15 Materials, +12 Fibers");
       } else if (actionType === "clear_pasture") {
         s.locations[0].fertilityPasturesMax += 1;
         s.resources.wood += 20;
         this.log(`Pasture Cleared: Cleared scrubland, yielding 20 Wood and +1 Pasture Capacity.`, "log-positive");
+        this.recordAction(actionLabel, "development", costLabel, oddsPct, "Success", "+1 Pasture Cap, +20 Wood");
       } else if (actionType === "commune_spirits") {
         s.spirits[0].favor = MathUtils.clamp(s.spirits[0].favor + 14, 0, 100);
         s.magic.pools.water = MathUtils.clamp(s.magic.pools.water + 15, 0, 50);
         this.log(`Spiritual Communion: Oshun receives your sacred dances. Favor rises to ${s.spirits[0].favor}%.`, "log-divine");
+        this.recordAction(actionLabel, "culture", costLabel, oddsPct, "Divine", "+14% Favor, +15 Water Mana");
       } else if (actionType === "tame_beasts") {
         s.herds[0].count += 3;
         this.log(`Taming Success: Ensnared 3 wild horned goats, expanding the tribe's herd.`, "log-positive");
+        this.recordAction(actionLabel, "development", costLabel, oddsPct, "Success", "+3 Herd Animals");
       } else if (actionType === "codify_law") {
         s.telemetry.tension = MathUtils.clamp(s.telemetry.tension - 12, 0, 100);
         this.log(`Law Inscribed: The Elder Council codified ancestral customs, reducing Tension by 12.`, "log-positive");
+        this.recordAction(actionLabel, "leadership", costLabel, oddsPct, "Success", "-12% Tension");
       }
     } else {
       // Failure or setback
       s.telemetry.tension += 4;
       this.log(`Action Complication: The endeavor encountered unexpected resistance and failed to achieve its primary objective.`, "log-negative");
+      this.recordAction(actionLabel, "leadership", costLabel, oddsPct, "Failed", "Setback (+4% Tension)");
     }
 
     this.renderAll();
@@ -1367,14 +1553,18 @@ const GameEngine = {
       s.resources.foodPreserved += converted;
       s.resources.pottery += 1;
       this.log(`Sealed ${converted} food into airtight clay pottery jars.`, "log-positive");
+      this.recordAction("Craft Pottery Jar", "commerce", "3 Mat, 1 Wood", "100%", "Success", `Sealed ${converted} food`);
     } else if (craftId === "craft_hut") {
       s.locations[0].buildings[0].capacity += 1;
       this.log(`Constructed an additional insulated hut. Housing capacity increased to ${s.locations[0].buildings[0].capacity}.`, "log-positive");
+      this.recordAction("Build Pop Hut", "commerce", "15 Wood, 8 Fib, 5 Hide", "100%", "Success", "+1 Housing Capacity");
     } else if (craftId === "craft_storehouse") {
       s.locations[0].buildings[1].capacity += 60;
       this.log(`Expanded Storehouse: Protected storage capacity raised to ${s.locations[0].buildings[1].capacity}.`, "log-positive");
+      this.recordAction("Expand Storehouse", "commerce", "25 Wood, 12 Mat, 6 Fib", "100%", "Success", "+60 Storage Cap");
     } else {
       this.log(`Crafted ${craft.name}.`, "log-positive");
+      this.recordAction(`Craft ${craft.name}`, "commerce", "Materials", "100%", "Success", craft.effect);
     }
 
     this.renderAll();
@@ -1401,11 +1591,14 @@ const GameEngine = {
       if (tech.id === "tech_ideograms") {
         s.commandLimit += 2;
         this.log(`TECHNOLOGY MASTERED: ${tech.name}! Command Limit increased by +2 (now ${s.commandLimit}).`, "log-divine");
+        this.recordAction(`Master ${tech.name}`, "research", `${invested} Res`, "100%", "Divine", "Unlocked (+2 Command Limit)");
       } else {
         this.log(`TECHNOLOGY MASTERED: ${tech.name}! ${tech.desc}`, "log-divine");
+        this.recordAction(`Master ${tech.name}`, "research", `${invested} Res`, "100%", "Divine", "Technology Mastered!");
       }
     } else {
       this.log(`Invested ${invested} Research points into ${tech.name} (${tech.progress}/${tech.cost}).`);
+      this.recordAction(`Research ${tech.name}`, "research", `${invested} Res`, "100%", "Success", `Progress: ${tech.progress}/${tech.cost}`);
     }
 
     this.renderAll();
@@ -1418,6 +1611,7 @@ const GameEngine = {
     this.renderTopBar();
     this.renderResourceStrip();
     this.renderSphereDock();
+    this.renderActionTracker();
     this.renderChronicle();
 
     const claimedCount = this.state.locations.length;
@@ -1477,6 +1671,37 @@ const GameEngine = {
     }
   },
 
+  renderActionTracker() {
+    const s = this.state;
+    const currentTurn = s.year * 4 + s.turn;
+    const seasonActions = s.actionHistory.filter(a => a.turnIndex === currentTurn);
+
+    const countEl = document.getElementById("ui-action-count");
+    if (countEl) countEl.innerText = seasonActions.length;
+
+    const listEl = document.getElementById("action-tracker-list");
+    if (!listEl) return;
+
+    if (seasonActions.length === 0) {
+      listEl.innerHTML = `<div style="color:var(--text-muted); font-size:11px;">No actions taken yet in ${s.seasons[s.turn]} (Year ${s.year}).</div>`;
+      return;
+    }
+
+    listEl.innerHTML = seasonActions.slice(0, 5).map(a => {
+      const cls = a.outcome === "Failed" ? "outcome-fail" : a.outcome === "Divine" ? "outcome-divine" : "";
+      const badgeCls = a.outcome === "Failed" ? "chip-red" : a.outcome === "Divine" ? "chip-purple" : "chip-green";
+      return `
+        <div class="tracker-item ${cls}">
+          <div style="min-width:0;">
+            <div class="tracker-item-title">${a.name}</div>
+            <div class="tracker-item-sub">${a.cost} • ${a.effect}</div>
+          </div>
+          <span class="chip ${badgeCls}">${a.outcome}</span>
+        </div>
+      `;
+    }).join("");
+  },
+
   renderActiveSphereDrawer() {
     const s = this.state;
     const key = this.activeSphere;
@@ -1487,7 +1712,8 @@ const GameEngine = {
         { id: "sovereign", label: "Dynasty & Blood" },
         { id: "council", label: "All Factions" },
         { id: "planner", label: "Action Planner" },
-        { id: "chronicle", label: "Full Chronicle" }
+        { id: "actions", label: "Action Log" },
+        { id: "chronicle", label: "Chronicle" }
       ]},
       development: { icon: "&#x1F331;", title: "Development Sphere — Pops, Land & Herds", factionId: "fac_harvesters", subtabs: [
         { id: "pops", label: "Pops & Labor" },
@@ -1570,8 +1796,10 @@ const GameEngine = {
                 <div><strong>Weakness:</strong> <span style="color:var(--accent-red);">${s.leader.weakness}</span></div>
               </div>
               <div style="display:flex; gap:8px; margin-top:10px;">
-                <button class="btn btn-primary" onclick="GameEngine.hostCouncilFeast()">&#x1F377; Host Feast (1 Lead, 25 Food)</button>
-                <button class="btn" onclick="GameEngine.codifyPeaceAccord()">&#x1F4DC; Peace Accord (2 Lead)</button>
+                <button class="btn btn-primary" onclick="GameEngine.hostCouncilFeast()"
+                  data-hover-tag="DECREE • LEADERSHIP" data-hover-title="Host Council Feast" data-hover-desc="Shares food across tribal hearths to unite all 5 factions and soothe internal unrest." data-hover-meta="Cost: 1 Leadership, 25 Food • +8% All Opinions, -10% Tension">&#x1F377; Host Feast (1 Lead, 25 Food)</button>
+                <button class="btn" onclick="GameEngine.codifyPeaceAccord()"
+                  data-hover-tag="LAW • LEADERSHIP" data-hover-title="Decree Peace Accord" data-hover-desc="Enforces binding ancestral law across factions to curb sedition." data-hover-meta="Cost: 2 Leadership • -15% Tension">&#x1F4DC; Peace Accord (2 Lead)</button>
               </div>
             </div>
             <div class="card">
@@ -1641,8 +1869,39 @@ const GameEngine = {
                 <div style="font-size:10px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Success Probability (&sigma; = 0.15)</div>
               </div>
               <div class="prob-val" id="action-prob-val">70%</div>
-              <button class="btn btn-primary" onclick="GameEngine.executeAction()">Execute Project</button>
+              <button class="btn btn-primary" onclick="GameEngine.executeAction()"
+                data-hover-tag="PROJECT • CONTINUOUS MATH" data-hover-title="Execute Executive Project" data-hover-desc="Resolves the selected tribal endeavor using a sigmoid probability curve of Development + Leadership power." data-hover-meta="Uses slider-allocated Sphere energy">Execute Project</button>
             </div>
+          </div>
+        `;
+      }
+      if (subtab === "actions") {
+        if (s.actionHistory.length === 0) {
+          return `<div class="card"><p style="color:var(--text-muted);">No actions have been recorded yet. Scout a cell, craft an item, or execute a project to begin logging.</p></div>`;
+        }
+        return `
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr><th>When</th><th>Action</th><th>Sphere</th><th>Cost</th><th>Odds</th><th>Outcome</th><th>Effect</th></tr>
+              </thead>
+              <tbody>
+                ${s.actionHistory.map(a => {
+                  const badgeCls = a.outcome === "Failed" ? "chip-red" : a.outcome === "Divine" ? "chip-purple" : "chip-green";
+                  return `
+                    <tr>
+                      <td>${a.season} Y${a.year}</td>
+                      <td><strong>${a.name}</strong></td>
+                      <td style="text-transform:capitalize;">${a.sphere}</td>
+                      <td>${a.cost}</td>
+                      <td>${a.odds}</td>
+                      <td><span class="chip ${badgeCls}">${a.outcome}</span></td>
+                      <td style="color:var(--text-muted);">${a.effect}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
           </div>
         `;
       }
@@ -1716,8 +1975,10 @@ const GameEngine = {
               <div style="font-size:12px; margin-bottom:8px;">Dairy Output: <strong>+${Math.round(h.count * 1.8)} food/season</strong></div>
               <p style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Traits: <em>${h.traits.join(", ")}</em>. Breeds every Spring.</p>
               <div style="display:flex; gap:6px;">
-                <button class="btn btn-primary" onclick="GameEngine.tameWildGoats()">Tame Wild (+3, 2 Dev)</button>
-                <button class="btn btn-danger" onclick="GameEngine.slaughterHerd('${h.id}', 2)">Slaughter 2 (+40 Food)</button>
+                <button class="btn btn-primary" onclick="GameEngine.tameWildGoats()"
+                  data-hover-tag="HUSBANDRY • DEVELOPMENT" data-hover-title="Tame Wild Goats" data-hover-desc="Captures wild horned goats to expand dairy yields and spring herd reproduction." data-hover-meta="Cost: 2 Development • +3 Animals">Tame Wild (+3, 2 Dev)</button>
+                <button class="btn btn-danger" onclick="GameEngine.slaughterHerd('${h.id}', 2)"
+                  data-hover-tag="BUTCHERY • DEVELOPMENT" data-hover-title="Slaughter 2 Goats" data-hover-desc="Culls animals for an immediate burst of fresh meat and hides." data-hover-meta="Cost: 2 Herd • +40 Fresh Food, +8 Hides">Slaughter 2 (+40 Food)</button>
               </div>
             </div>
           </div>
@@ -1747,8 +2008,10 @@ const GameEngine = {
     if (sphereKey === "military") {
       return `
         <div style="display:flex; gap:8px; margin-bottom:10px;">
-          <button class="btn btn-primary" onclick="GameEngine.trainSpearmen()">&#x2694; Train Spearmen (1 Mil, 10 Mat, 12 Wood)</button>
-          <button class="btn" onclick="GameEngine.fortifyCamp()">&#x1F6E1; Raise Palisade (1 Mil, 15 Wood)</button>
+          <button class="btn btn-primary" onclick="GameEngine.trainSpearmen()"
+            data-hover-tag="RECRUITMENT • MILITARY" data-hover-title="Train River Spearmen" data-hover-desc="Equips an infantry regiment with flint spears. Spears counter enemy Swords and Cavalry." data-hover-meta="Cost: 1 Military, 10 Materials, 12 Wood">&#x2694; Train Spearmen (1 Mil, 10 Mat, 12 Wood)</button>
+          <button class="btn" onclick="GameEngine.fortifyCamp()"
+            data-hover-tag="DEFENSE • MILITARY" data-hover-title="Raise Timber Palisade" data-hover-desc="Fortifies Janas Valley against raids and eases tribal insecurity." data-hover-meta="Cost: 1 Military, 15 Wood • -5% Tension">&#x1F6E1; Raise Palisade (1 Mil, 15 Wood)</button>
         </div>
         <div class="table-container" style="margin-bottom:10px;">
           <table class="data-table">
@@ -1792,7 +2055,8 @@ const GameEngine = {
             <div style="font-size:11px; background:rgba(248,81,73,0.1); border-left:3px solid var(--accent-red); padding:8px; border-radius:4px; margin-bottom:10px;">
               <strong>Divine Taboo:</strong> ${sp.taboos}
             </div>
-            <button class="btn btn-primary" onclick="GameEngine.offerFoodSacrifice()">&#x1F525; Offer River Sacrifice (1 Culture, 20 Food)</button>
+            <button class="btn btn-primary" onclick="GameEngine.offerFoodSacrifice()"
+              data-hover-tag="WORSHIP • CULTURE" data-hover-title="Offer River Sacrifice" data-hover-desc="Appeases Oshun of the Jade Waters to gain Favor, Water Mana, Shamans support, and lower Entropy." data-hover-meta="Cost: 1 Culture, 20 Fresh Food">&#x1F525; Offer River Sacrifice (1 Culture, 20 Food)</button>
           </div>
         `;
       }
@@ -1819,7 +2083,8 @@ const GameEngine = {
               <div class="card">
                 <div class="card-header"><span class="card-title">${sp.name}</span><span class="chip chip-purple">${sp.cost} ${sp.manaType}</span></div>
                 <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${sp.desc}</p>
-                <button class="btn btn-primary" onclick="GameEngine.castSpell('${sp.id}')">&#x2728; Cast Spell</button>
+                <button class="btn btn-primary" onclick="GameEngine.castSpell('${sp.id}')"
+                  data-hover-tag="MAGIC • ${sp.manaType.toUpperCase()}" data-hover-title="Cast ${sp.name}" data-hover-desc="${sp.desc}" data-hover-meta="Cost: ${sp.cost} ${sp.manaType} mana • +6% Entropy">&#x2728; Cast Spell</button>
               </div>
             `).join("")}
           </div>
@@ -1847,7 +2112,8 @@ const GameEngine = {
               ${
                 tech.researched
                   ? `<button class="btn" disabled>Researched</button>`
-                  : `<button class="btn btn-primary" onclick="GameEngine.researchTech('${tech.id}')">Invest Research</button>`
+                  : `<button class="btn btn-primary" onclick="GameEngine.researchTech('${tech.id}')"
+                      data-hover-tag="INNOVATION • RESEARCH" data-hover-title="Research ${tech.name}" data-hover-desc="${tech.desc}" data-hover-meta="Progress: ${tech.progress}/${tech.cost} • Spends available Research">Invest Research</button>`
               }
             </div>
           `).join("")}
@@ -1866,7 +2132,8 @@ const GameEngine = {
                 <div class="card">
                   <div class="card-header"><span class="card-title">${c.name}</span><span class="chip chip-blue">${costStr}</span></div>
                   <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${c.effect}</p>
-                  <button class="btn btn-primary" onclick="GameEngine.craftItem('${c.id}')">Craft</button>
+                  <button class="btn btn-primary" onclick="GameEngine.craftItem('${c.id}')"
+                    data-hover-tag="WORKSHOP • COMMERCE" data-hover-title="Craft ${c.name}" data-hover-desc="${c.effect}" data-hover-meta="Cost: ${costStr}">Craft</button>
                 </div>
               `;
             }).join("")}
@@ -1881,7 +2148,8 @@ const GameEngine = {
             <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
               Fresh Food decays by 45% each season. Seal 10 Fresh Food inside a Clay Pottery Jar so it never spoils.
             </p>
-            <button class="btn btn-primary" onclick="GameEngine.preserveFoodWithPottery()">Seal 10 Food (Costs 1 Pottery Jar)</button>
+            <button class="btn btn-primary" onclick="GameEngine.preserveFoodWithPottery()"
+              data-hover-tag="LOGISTICS • COMMERCE" data-hover-title="Seal Food in Clay Jar" data-hover-desc="Converts perishable food into permanent rations exempt from the -45% seasonal spoilage loss." data-hover-meta="Cost: 1 Pottery Jar, 10 Fresh Food">Seal 10 Food (Costs 1 Pottery Jar)</button>
           </div>
           <div class="grid-4">
             ${[

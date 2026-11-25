@@ -49,10 +49,25 @@
       </div>
     </div>
 
-    <button id="btn-end-turn" class="btn-next-turn">
-      <span>End Season</span>
-      <span>&#x27A4;</span>
-    </button>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button class="btn" id="btn-open-tutorial" onclick="GameEngine.openTutorial(0)"
+        data-hover-tag="GUIDE"
+        data-hover-title="Sovereign Quick-Start Guide"
+        data-hover-desc="Reopen the 4-step basics tutorial explaining exploration, spheres, food spoilage, and divine chaos."
+        data-hover-meta="Shortcut: Always available">
+        <span>&#x2753;</span>
+        <span>Guide</span>
+      </button>
+
+      <button id="btn-end-turn" class="btn-next-turn"
+        data-hover-tag="TURN ADVANCE"
+        data-hover-title="End Current Season"
+        data-hover-desc="Harvests resources from worked sites, advances crops, halves unpreserved fresh food, and checks winter wood fuel. Year-end triggers weather shifts & chaotic events."
+        data-hover-meta="Advances 1 Season (Spring → Summer → Autumn → Winter)">
+        <span>End Season</span>
+        <span>&#x27A4;</span>
+      </button>
+    </div>
   </header>
 
   <!-- SLIM RESOURCE INVENTORY STRIP -->
@@ -77,16 +92,23 @@
 
     <!-- TOP-LEFT FLOATING MAP CONTROLS -->
     <div class="map-floating-toolbar">
-      <button class="btn btn-map-mode active" data-mode="biome" onclick="GameEngine.setMapMode('biome')">Biomes</button>
-      <button class="btn btn-map-mode" data-mode="political" onclick="GameEngine.setMapMode('political')">Territory</button>
-      <button class="btn btn-map-mode" data-mode="elevation" onclick="GameEngine.setMapMode('elevation')">Relief</button>
-      <button class="btn btn-map-mode" data-mode="climate" onclick="GameEngine.setMapMode('climate')">Climate</button>
+      <button class="btn btn-map-mode active" data-mode="biome" onclick="GameEngine.setMapMode('biome')"
+        data-hover-tag="MAP LENS" data-hover-title="Biome View" data-hover-desc="Displays natural terrains: Grasslands, Forests, Deserts, Wetlands, Tundra, and Mountain Peaks." data-hover-meta="Default exploration view">Biomes</button>
+      <button class="btn btn-map-mode" data-mode="political" onclick="GameEngine.setMapMode('political')"
+        data-hover-tag="MAP LENS" data-hover-title="Territory View" data-hover-desc="Highlights borders of the Janas Clan and discovered Rival Tribes across the continent." data-hover-meta="Shows sovereign ownership">Territory</button>
+      <button class="btn btn-map-mode" data-mode="elevation" onclick="GameEngine.setMapMode('elevation')"
+        data-hover-tag="MAP LENS" data-hover-title="Elevation & Relief" data-hover-desc="Topographic heightmap from sea basins to high mountain ridges." data-hover-meta="Higher elevation lowers temperature">Relief</button>
+      <button class="btn btn-map-mode" data-mode="climate" onclick="GameEngine.setMapMode('climate')"
+        data-hover-tag="MAP LENS" data-hover-title="Climate & Temperature" data-hover-desc="Visualizes latitude & altitude temperature zones from arctic frost to equatorial heat." data-hover-meta="Blue = Cold • Red = Hot">Climate</button>
 
       <div class="toolbar-sep"></div>
 
-      <button class="btn" onclick="MapRenderer.centerOnCell(GameEngine.state.world.startCellId, 1.8)">&#x2316; Capital</button>
-      <button class="btn" onclick="MapRenderer.resetView()">&#x26F6; Fit</button>
-      <button class="btn" id="btn-toggle-fog" onclick="GameEngine.toggleFogPreview()">&#x1F441; Fog</button>
+      <button class="btn" onclick="MapRenderer.centerOnCell(GameEngine.state.world.startCellId, 1.8)"
+        data-hover-tag="CAMERA" data-hover-title="Center on Capital" data-hover-desc="Snaps the camera back to Janas Valley, your founding capital." data-hover-meta="Zoom: 1.8x">&#x2316; Capital</button>
+      <button class="btn" onclick="MapRenderer.resetView()"
+        data-hover-tag="CAMERA" data-hover-title="Fit Whole World" data-hover-desc="Resets pan and zoom to show the entire procedural Voronoi map." data-hover-meta="Zoom: 1.0x">&#x26F6; Fit</button>
+      <button class="btn" id="btn-toggle-fog" onclick="GameEngine.toggleFogPreview()"
+        data-hover-tag="VISIBILITY" data-hover-title="Toggle Fog Preview" data-hover-desc="Peeks beneath the Fog of War to preview the full generated continent, rivers, and rivals." data-hover-meta="Preview only (doesn't scout)">&#x1F441; Fog</button>
 
       <div class="toolbar-sep"></div>
 
@@ -97,8 +119,24 @@
         <option value="highlands">Highland Spine</option>
       </select>
       <input id="input-world-seed" type="text" value="Janas-Dawn" placeholder="Seed..." style="width:92px; padding:3px 6px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:5px; font-size:11px;">
-      <button class="btn btn-primary" onclick="GameEngine.regenerateWorld()">New World</button>
+      <button class="btn btn-primary" onclick="GameEngine.regenerateWorld()"
+        data-hover-tag="WORLD GEN" data-hover-title="Generate New World" data-hover-desc="Rebuilds the Voronoi cells, heightmap, rivers, and biomes using the chosen seed and terrain preset." data-hover-meta="Deterministic seed generator">New World</button>
     </div>
+
+    <!-- FLOATING SEASONAL ACTION TRACKER -->
+    <aside class="action-tracker-widget" id="action-tracker-widget">
+      <div class="tracker-header">
+        <span>&#x1F4CB; Action Ledger (<span id="ui-action-count">0</span>)</span>
+        <div style="display:flex; gap:4px;">
+          <button class="btn" style="padding:1px 6px; font-size:10px;" onclick="GameEngine.openSphereMenu('leadership', 'actions')"
+            data-hover-tag="LEDGER" data-hover-title="Open Full Action Log" data-hover-desc="View a complete chronological table of every tribal action, cost, odds, and outcome across all years." data-hover-meta="Opens Leadership → Action Log">Full Log</button>
+          <button class="btn" style="padding:1px 6px;" id="btn-toggle-tracker" onclick="GameEngine.toggleActionTracker()">&#x2212;</button>
+        </div>
+      </div>
+      <div class="tracker-body" id="action-tracker-list">
+        <div style="color:var(--text-muted); font-size:11px;">No actions taken yet this season.</div>
+      </div>
+    </aside>
 
     <!-- BOTTOM-LEFT LIVE CHRONICLE PILL & MAP LEGEND -->
     <div class="map-bottom-left">
@@ -146,32 +184,38 @@
 
     <!-- BOTTOM 6-SPHERE EMBEDDED DOCK -->
     <nav id="sphere-dock">
-      <button class="sphere-dock-btn" data-sphere="leadership" onclick="GameEngine.toggleSphereMenu('leadership')">
+      <button class="sphere-dock-btn" data-sphere="leadership" onclick="GameEngine.toggleSphereMenu('leadership')"
+        data-hover-tag="SPHERE • UNIVERSAL" data-hover-title="Leadership Sphere" data-hover-desc="Governs your Dynasty, Bloodline mutations, Council Factions, Peace Decrees, Executive Action Planner, and Full Action Log." data-hover-meta="Wildcard energy usable across decrees & feasts">
         <span>&#x1F451;</span>
         <span>Leadership</span>
         <span class="sphere-dock-val" id="dock-val-leadership">4</span>
       </button>
-      <button class="sphere-dock-btn" data-sphere="development" onclick="GameEngine.toggleSphereMenu('development')">
+      <button class="sphere-dock-btn" data-sphere="development" onclick="GameEngine.toggleSphereMenu('development')"
+        data-hover-tag="SPHERE • SOIL & HEARTH KEEPERS" data-hover-title="Development Sphere" data-hover-desc="Manages Population labor assignments, Crop fields, Pastoral herds, and Claiming new map cells." data-hover-meta="Used for claiming territory, roads & taming">
         <span>&#x1F331;</span>
         <span>Development</span>
         <span class="sphere-dock-val" id="dock-val-development">3</span>
       </button>
-      <button class="sphere-dock-btn" data-sphere="military" onclick="GameEngine.toggleSphereMenu('military')">
+      <button class="sphere-dock-btn" data-sphere="military" onclick="GameEngine.toggleSphereMenu('military')"
+        data-hover-tag="SPHERE • SPEAR WARRIORS" data-hover-title="Military Sphere" data-hover-desc="Controls regiment training, timber palisades, tactical counters, and raiding rival tribes." data-hover-meta="Used to train troops, fortify & raid">
         <span>&#x2694;</span>
         <span>Military</span>
         <span class="sphere-dock-val" id="dock-val-military">4</span>
       </button>
-      <button class="sphere-dock-btn" data-sphere="culture" onclick="GameEngine.toggleSphereMenu('culture')">
+      <button class="sphere-dock-btn" data-sphere="culture" onclick="GameEngine.toggleSphereMenu('culture')"
+        data-hover-tag="SPHERE • WATER SHAMANS" data-hover-title="Culture Sphere" data-hover-desc="Appeases capricious Spirits, investigates ancient map Anomalies, and channels the 8 Natures of Magic." data-hover-meta="Used for sacrifices, rituals & anomalies">
         <span>&#x2728;</span>
         <span>Culture</span>
         <span class="sphere-dock-val" id="dock-val-culture">6</span>
       </button>
-      <button class="sphere-dock-btn" data-sphere="research" onclick="GameEngine.toggleSphereMenu('research')">
+      <button class="sphere-dock-btn" data-sphere="research" onclick="GameEngine.toggleSphereMenu('research')"
+        data-hover-tag="SPHERE • COUNCIL OF ELDERS" data-hover-title="Research Sphere" data-hover-desc="Unlocks tribal technologies (Pottery, Agriculture, Ideograms) and powers scouting expeditions into Fog of War." data-hover-meta="Used for tech breakthroughs & scouting">
         <span>&#x1F52C;</span>
         <span>Research</span>
         <span class="sphere-dock-val" id="dock-val-research">2</span>
       </button>
-      <button class="sphere-dock-btn" data-sphere="commerce" onclick="GameEngine.toggleSphereMenu('commerce')">
+      <button class="sphere-dock-btn" data-sphere="commerce" onclick="GameEngine.toggleSphereMenu('commerce')"
+        data-hover-tag="SPHERE • RIVER BARGEMEN" data-hover-title="Commerce Sphere" data-hover-desc="Crafts tools, huts, storehouses, and clay pottery jars to seal perishable food, plus bartering with neighbors." data-hover-meta="Used for crafting & rival trade caravans">
         <span>&#x2696;</span>
         <span>Commerce</span>
         <span class="sphere-dock-val" id="dock-val-commerce">4</span>
@@ -192,6 +236,33 @@
 
   <!-- FLOATING MAP TOOLTIP -->
   <div id="map-hover-tooltip"></div>
+
+  <!-- ACTIVITY HOVER HIGHLIGHT POP-OUT CARD -->
+  <div id="activity-hover-card">
+    <div class="hover-card-tag" id="hover-card-tag">ACTIVITY</div>
+    <div class="hover-card-title" id="hover-card-title">Title</div>
+    <div class="hover-card-desc" id="hover-card-desc">Description</div>
+    <div class="hover-card-meta" id="hover-card-meta">Cost / Effect</div>
+  </div>
+
+  <!-- STARTUP TUTORIAL OVERLAY -->
+  <div id="tutorial-modal-overlay" class="active">
+    <div class="tutorial-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span class="modal-tag" style="color:var(--accent-gold); margin-bottom:0;" id="tutorial-step-tag">WELCOME • STEP 1 OF 4</span>
+        <button class="btn" onclick="GameEngine.closeTutorial()">Skip Tutorial</button>
+      </div>
+      <div class="modal-title" id="tutorial-step-title">Welcome, Chieftain of the Janas Clan</div>
+      <div class="modal-body" id="tutorial-step-body" style="margin-bottom:0;"></div>
+      <div class="tutorial-footer">
+        <div class="tutorial-dots" id="tutorial-dots"></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="btn-tut-prev" onclick="GameEngine.stepTutorial(-1)">&#x2190; Back</button>
+          <button class="btn btn-primary" id="btn-tut-next" onclick="GameEngine.stepTutorial(1)">Next &#x2192;</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="map/voronoi.js"></script>
   <script src="map/world-generator.js"></script>
