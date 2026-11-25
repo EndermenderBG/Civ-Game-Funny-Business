@@ -1,0 +1,3 @@
+@echo off
+echo Starting Tribal Sovereign & Divine Entropy Prototype...
+start "" "%~dp0index.html"

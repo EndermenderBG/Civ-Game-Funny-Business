@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tribal Sovereign & Divine Entropy - Civ Sim</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- TOP STATUS BAR -->
+  <header id="top-bar">
+    <div class="brand-section">
+      <div class="brand-icon">&#x2655;</div>
+      <div>
+        <div class="brand-title" id="ui-tribe-name">Janas Clan</div>
+        <div class="brand-subtitle" id="ui-leader-name">Kiwele the Unchosen</div>
+      </div>
+    </div>
+
+    <!-- Temporal Horizon & Climate -->
+    <div class="turn-tracker">
+      <div id="ui-season-badge" class="season-badge season-spring">Spring</div>
+      <div style="font-weight:700; color:#fff;" id="ui-year-val">Year 1</div>
+      <div class="weather-stats">
+        <div class="weather-item">&#x1F321; <span id="ui-temp-val">19°C</span></div>
+        <div class="weather-item">&#x1F327; <span id="ui-weather-cond">Mild & Fertile</span></div>
+      </div>
+    </div>
+
+    <!-- Telemetry Gauges (Tension & Entropy) -->
+    <div class="chaos-telemetry">
+      <div class="telemetry-gauge">
+        <div class="gauge-label">
+          <span>Tension</span>
+          <span id="val-tension" style="color:var(--accent-gold);">20%</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="gauge-tension-fill" class="gauge-fill" style="width:20%; background:var(--accent-gold);"></div>
+        </div>
+      </div>
+
+      <div class="telemetry-gauge">
+        <div class="gauge-label">
+          <span>Entropy</span>
+          <span id="val-entropy" style="color:var(--accent-purple);">15%</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="gauge-entropy-fill" class="gauge-fill" style="width:15%; background:var(--accent-purple);"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Season Action Button -->
+    <button id="btn-end-turn" class="btn-next-turn">
+      <span>End Season</span>
+      <span>&#x27A4;</span>
+    </button>
+  </header>
+
+  <!-- RESOURCE INVENTORY STRIP -->
+  <div id="resource-strip">
+    <div class="res-item">
+      <span>&#x1F356; Fresh Food:</span>
+      <strong id="res-food-perishable">150</strong>
+      <span class="text-dim" style="font-size:10px;">(50% spoils/season)</span>
+    </div>
+    <div class="res-item">
+      <span>&#x1F3FA; Preserved Food:</span>
+      <strong id="res-food-preserved">75</strong>
+    </div>
+    <div class="res-item">
+      <span>&#x1F4A7; Water:</span>
+      <strong id="res-water">250</strong>
+    </div>
+    <div class="res-item">
+      <span>&#x1FAB5; Wood/Fuel:</span>
+      <strong id="res-wood">90</strong>
+    </div>
+    <div class="res-item">
+      <span>&#x2692; Materials:</span>
+      <strong id="res-materials">40</strong>
+    </div>
+    <div class="res-item">
+      <span>&#x1F3FA; Pottery Jars:</span>
+      <strong id="res-pottery">12</strong>
+    </div>
+  </div>
+
+  <!-- MAIN WORKSPACE CONTAINER -->
+  <div id="main-container">
+
+    <!-- SIDEBAR LEDGER NAVIGATION -->
+    <nav id="sidebar-nav">
+      <button class="nav-tab-btn active" data-tab="map">
+        <span>&#x1F30D;</span> World Map
+      </button>
+      <button class="nav-tab-btn" data-tab="overview">
+        <span>&#x1F4CA;</span> Overview & Actions
+      </button>
+      <button class="nav-tab-btn" data-tab="territory">
+        <span>&#x1F5FA;</span> Claimed Sites
+      </button>
+      <button class="nav-tab-btn" data-tab="population">
+        <span>&#x1F465;</span> Population & Labor
+      </button>
+      <button class="nav-tab-btn" data-tab="agrarian">
+        <span>&#x1F33E;</span> Crops & Herds
+      </button>
+      <button class="nav-tab-btn" data-tab="factions">
+        <span>&#x2696;</span> Factions Council
+      </button>
+      <button class="nav-tab-btn" data-tab="tech">
+        <span>&#x1F52C;</span> Tech & Workshop
+      </button>
+      <button class="nav-tab-btn" data-tab="military">
+        <span>&#x2694;</span> Military Garrison
+      </button>
+      <button class="nav-tab-btn" data-tab="spirits">
+        <span>&#x2728;</span> Spirits & Pantheon
+      </button>
+      <button class="nav-tab-btn" data-tab="magic">
+        <span>&#x1F52E;</span> 8 Arcane Manas
+      </button>
+      <button class="nav-tab-btn" data-tab="chronicle">
+        <span>&#x1F4DC;</span> Tribal Chronicle
+      </button>
+    </nav>
+
+    <!-- CONTENT VIEWPORT -->
+    <main id="content-view">
+
+      <!-- TAB 0: AZGAAR-STYLE EXPLORABLE WORLD MAP -->
+      <section id="tab-map" class="tab-content active">
+        <div class="map-toolbar">
+          <div class="map-toolbar-group">
+            <span style="font-size:12px; font-weight:700; color:var(--text-muted); margin-right:4px;">MAP MODE:</span>
+            <button class="btn btn-map-mode active" data-mode="biome" onclick="GameEngine.setMapMode('biome')">Biomes</button>
+            <button class="btn btn-map-mode" data-mode="political" onclick="GameEngine.setMapMode('political')">Territory</button>
+            <button class="btn btn-map-mode" data-mode="elevation" onclick="GameEngine.setMapMode('elevation')">Relief</button>
+            <button class="btn btn-map-mode" data-mode="climate" onclick="GameEngine.setMapMode('climate')">Climate</button>
+          </div>
+
+          <div class="map-toolbar-group">
+            <span class="chip chip-gold" id="ui-map-command-limit">Claimed: 1 / 3</span>
+            <select id="select-world-preset" style="padding:5px 8px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:6px; font-size:12px;">
+              <option value="river_basin">River Basin</option>
+              <option value="continents">Twin Continents</option>
+              <option value="archipelago">Archipelago</option>
+              <option value="highlands">Highland Spine</option>
+            </select>
+            <input id="input-world-seed" type="text" value="Janas-Dawn" placeholder="Seed..." style="width:110px; padding:5px 8px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:6px; font-size:12px;">
+            <button class="btn btn-primary" onclick="GameEngine.regenerateWorld()">New World</button>
+          </div>
+        </div>
+
+        <div class="map-workspace">
+          <!-- Interactive SVG Viewport -->
+          <div class="map-canvas-container">
+            <div class="map-overlay-controls">
+              <button class="btn" onclick="MapRenderer.centerOnCell(GameEngine.state.world.startCellId, 1.8)">&#x2316; Center Capital</button>
+              <button class="btn" onclick="MapRenderer.resetView()">&#x26F6; Fit Map</button>
+              <button class="btn" id="btn-toggle-fog" onclick="GameEngine.toggleFogPreview()">&#x1F441; Fog Preview</button>
+            </div>
+
+            <svg id="world-map-svg"></svg>
+
+            <div class="map-legend">
+              <span><span class="legend-dot" style="background:#e3b341;"></span>Janas Territory</span>
+              <span><span class="legend-dot" style="background:#53a4f5;"></span>River (2x Fertility)</span>
+              <span><span class="legend-dot" style="background:#bc8cff;"></span>Anomaly</span>
+              <span><span class="legend-dot" style="background:#f85149;"></span>Rival Clan</span>
+              <span style="color:var(--text-dim);">Drag to Pan • Scroll to Zoom • Click Cell</span>
+            </div>
+          </div>
+
+          <!-- Right-Hand Cell Inspector -->
+          <aside class="map-inspector-panel" id="map-cell-inspector">
+            <div style="color:var(--text-muted); font-size:13px;">Select a Voronoi cell on the map to inspect its biome, sites, and expedition actions.</div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- TAB 1: OVERVIEW & ACTION PLANNER -->
+      <section id="tab-overview" class="tab-content">
+        <h2 class="view-title">Sovereign Command & Sphere Potentials</h2>
+        <p class="view-desc">
+          Allocate your tribe's generated continuous energy across the 6 civilizational spheres to undertake seasonal projects.
+        </p>
+
+        <!-- Sphere Potential Cards -->
+        <div id="sphere-cards-container" class="grid-3"></div>
+
+        <!-- Action Planning Bay -->
+        <div class="action-box">
+          <div class="card-title" style="margin-bottom:12px;">
+            <span>&#x2699;</span> Seasonal Executive Action Planner
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+            Select an action and allocate Sphere energy. Continuous logistic probability models calculate success chance, diminishing returns, and risk of complication.
+          </p>
+
+          <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:14px;">
+            <div style="flex:1; min-width:200px;">
+              <label style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">Action Objective</label>
+              <select id="select-action-type" style="width:100%; padding:8px; background:var(--bg-card); color:#fff; border:1px solid var(--border-color); border-radius:6px;" onchange="GameEngine.updateActionProbabilityPreview()">
+                <option value="explore">Explore Outer Frontier (Find Resources/Sites)</option>
+                <option value="clear_pasture">Clear & Fence New Pasture (+1 Pasture Slot)</option>
+                <option value="commune_spirits">Commune & Dance for River Spirit (+Favor & Mana)</option>
+                <option value="tame_beasts">Hunt & Trap Wild Horned Goats (+Livestock)</option>
+                <option value="codify_law">Codify Tribal Peace Accord (-Tension)</option>
+              </select>
+            </div>
+
+            <div style="flex:1; min-width:180px;">
+              <label style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">
+                Development Energy (<span id="val-action-primary">4</span>)
+              </label>
+              <div class="slider-group">
+                <input id="slider-action-primary" type="range" min="0" max="6" value="4">
+              </div>
+            </div>
+
+            <div style="flex:1; min-width:180px;">
+              <label style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); display:block; margin-bottom:4px;">
+                Leadership Support (<span id="val-action-secondary">2</span>)
+              </label>
+              <div class="slider-group">
+                <input id="slider-action-secondary" type="range" min="0" max="4" value="2">
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Continuous Probability Preview -->
+          <div class="probability-meter">
+            <div>
+              <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Calculated Success Probability</div>
+              <div style="font-size:12px; color:var(--text-muted);">Logistic curve with Gaussian noise variance (&sigma; = 0.15)</div>
+            </div>
+            <div class="prob-val" id="action-prob-val">76%</div>
+            <button id="btn-execute-action" class="btn btn-primary" style="padding:8px 16px;">Execute Project</button>
+          </div>
+        </div>
+
+        <!-- Recent Chronicle Highlights -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">&#x1F4DC; Recent Tribal Events</span>
+            <button class="btn" onclick="GameEngine.switchTab('chronicle')">View Full Chronicle</button>
+          </div>
+          <div id="chronicle-stream" class="log-stream"></div>
+        </div>
+      </section>
+
+      <!-- TAB 2: TERRITORY & SITES -->
+      <section id="tab-territory" class="tab-content">
+        <h2 class="view-title">Claimed Locations, Sites & Infrastructure</h2>
+        <p class="view-desc">
+          Your tribe controls discrete geographic Voronoi cells up to your Command Limit (<strong id="ui-territory-cmd">1 / 3</strong>). Claim new cells directly from the World Map.
+        </p>
+
+        <div id="claimed-locations-cards" class="grid-2"></div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header">
+            <span class="card-title">All Claimed Resource Sites</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="table-sites">
+              <thead>
+                <tr>
+                  <th>Location</th>
+                  <th>Site Name</th>
+                  <th>Type</th>
+                  <th>Yield Rate</th>
+                  <th>Extraction Cap</th>
+                  <th>Assigned Labor</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Constructed Buildings & Defenses</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="table-buildings">
+              <thead>
+                <tr>
+                  <th>Building Name</th>
+                  <th>Type</th>
+                  <th>Capacity</th>
+                  <th>Passive Function</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: POPULATION & LABOR -->
+      <section id="tab-population" class="tab-content">
+        <h2 class="view-title">Tribal Cohorts & Labor Allocation</h2>
+        <p class="view-desc">
+          Each pop cohort represents ~100 living souls with genetic Blood traits, housing needs, tool loadouts, and dietary requirements.
+        </p>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Total Population</span>
+            </div>
+            <div class="sphere-power-val" id="ui-pop-total">6 Cohorts</div>
+            <div class="sphere-sub">~600 living members</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Demographic Growth Progress</span>
+            </div>
+            <div class="sphere-power-val" id="ui-pop-growth-pct" style="color:var(--accent-green);">25%</div>
+            <div class="sphere-sub">Accumulates via diversified diets (3+ food types)</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Bloodline Profile</span>
+            </div>
+            <div style="font-weight:700; color:var(--accent-purple);">Ashkhan Muntu</div>
+            <div class="sphere-sub">+15% Melee, +20% Fishery Yield, +10% Calorie need</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Population Ledger</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="table-pops">
+              <thead>
+                <tr>
+                  <th>Cohort Name</th>
+                  <th>Bloodline</th>
+                  <th>Faction</th>
+                  <th>Assigned Workplace</th>
+                  <th>Housing</th>
+                  <th>Equipped Tools</th>
+                  <th>Health</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: CROPS & HERDS -->
+      <section id="tab-agrarian" class="tab-content">
+        <h2 class="view-title">Agrarian Fields & Pastoral Husbandry</h2>
+        <p class="view-desc">
+          Crops accumulate yield each season and must be harvested in Autumn. Herds graze on pastures, producing milk, wool, and meat through continuous biological reproduction.
+        </p>
+
+        <div class="grid-2">
+          <!-- Crop Fields -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">&#x1F33E; Cultivated Crop Fields</span>
+              <span class="chip chip-gold" id="ui-crop-name">Golden Sorghum</span>
+            </div>
+            <div style="font-size:13px; margin-bottom:12px;">
+              <div>Accumulated Yield: <strong id="ui-crop-yield">140 / 600</strong></div>
+              <div>Designated Harvest Season: <strong style="color:var(--accent-amber);" id="ui-crop-harvest-season">Autumn</strong></div>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted);">
+              Assigned farmers add +35 yield each season. When Autumn arrives, workers automatically reap grain. Any unharvested yield after Autumn rots in the soil.
+            </p>
+          </div>
+
+          <!-- Livestock Herds -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">&#x1F410; Pastoral Herds</span>
+              <span class="chip chip-green" id="ui-herd-species">River Horned Goats</span>
+            </div>
+            <div style="font-size:13px; margin-bottom:12px;">
+              <div>Herd Count: <strong id="ui-herd-count">14 Animals</strong></div>
+              <div>Seasonal Dairy Yield: <strong id="ui-herd-milk">+28 food/season</strong></div>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+              Traits: <em>Herbivore, Fruitful (+100% breeding), Hardy</em>. Herds reproduce every Spring following logistic carrying capacity.
+            </p>
+            <button class="btn btn-danger" onclick="alert('Slaughtering herds converts animals into meat and hides immediately.')">
+              Slaughter 2 Animals (Meat & Hides)
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: FACTIONS COUNCIL -->
+      <section id="tab-factions" class="tab-content">
+        <h2 class="view-title">Tribal Factions & Council Opinions</h2>
+        <p class="view-desc">
+          Your rule depends on faction consent. Each faction powers a specific Sphere. Fulfill their demands for bonus energy; ignore them and face sabotage or rebellion.
+        </p>
+
+        <div id="factions-list-container" class="grid-2"></div>
+      </section>
+
+      <!-- TAB 6: TECH & WORKSHOP -->
+      <section id="tab-tech" class="tab-content">
+        <h2 class="view-title">Technological Progression & Workshop Crafting</h2>
+        <p class="view-desc">
+          Invest continuous Research points to master technologies and craft tools, weapons, pottery preservation vessels, and storehouses.
+        </p>
+
+        <h3 style="font-size:15px; margin-bottom:12px; color:#fff;">Available Technologies</h3>
+        <div id="tech-list-container" class="grid-2" style="margin-bottom:24px;"></div>
+
+        <h3 style="font-size:15px; margin-bottom:12px; color:#fff;">Workshop Crafting Queue</h3>
+        <div id="crafting-list-container" class="grid-3"></div>
+      </section>
+
+      <!-- TAB 7: MILITARY GARRISON -->
+      <section id="tab-military" class="tab-content">
+        <h2 class="view-title">Martial Garrison & Tactical Defense</h2>
+        <p class="view-desc">
+          Units use a tactical counter triangle: Spears counter Swords and Cavalry; Swords counter Bows; Bows counter Spears. Continuous Lanchester combat governs all clashes.
+        </p>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Mobilized Units</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table" id="table-military">
+              <thead>
+                <tr>
+                  <th>Unit Regiment</th>
+                  <th>Class</th>
+                  <th>Combat Power</th>
+                  <th>Health %</th>
+                  <th>Loadout</th>
+                  <th>Tactical Affinity</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 8: SPIRITS & PANTHEON -->
+      <section id="tab-spirits" class="tab-content">
+        <h2 class="view-title">Spirits, Ancestors & The Divine Pantheon</h2>
+        <p class="view-desc">
+          Capricious nature spirits dwell in sacred groves and rivers. Offer food and reverent dances to gain potent boons, but heed their taboos to avert catastrophic curses.
+        </p>
+
+        <div class="card" style="max-width:600px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="ui-spirit-name">Oshun of the Jade Waters</div>
+              <div style="font-size:11px; color:var(--text-muted);" id="ui-spirit-title">Nascent River Spirit</div>
+            </div>
+            <span class="chip chip-purple" id="ui-spirit-favor">72% Favor</span>
+          </div>
+          <div style="font-size:13px; margin-bottom:12px;">
+            <strong>Active Boons:</strong>
+            <ul id="spirit-boons-list" style="margin-left:18px; margin-top:4px; font-size:12px; color:var(--text-muted);"></ul>
+          </div>
+          <div style="font-size:12px; background:rgba(248,81,73,0.1); border-left:3px solid var(--accent-red); padding:10px; border-radius:4px; margin-bottom:14px;">
+            <strong>Divine Taboo:</strong> <span id="ui-spirit-taboo">Do not fell trees along the riverbank.</span>
+          </div>
+          <button class="btn btn-primary" onclick="GameEngine.executeAction()">Perform Sacrificial Rite</button>
+        </div>
+      </section>
+
+      <!-- TAB 9: 8 ARCANE MANAS -->
+      <section id="tab-magic" class="tab-content">
+        <h2 class="view-title">The 8 Natures of Magic</h2>
+        <p class="view-desc">
+          Arcana, Life, Anarcana, Fire, Earth, Water, Light, Dark. Each resonance tracks independent reservoirs and fuel miraculous spells.
+        </p>
+
+        <div id="mana-reservoirs-container" class="grid-4"></div>
+      </section>
+
+      <!-- TAB 10: CHRONICLE -->
+      <section id="tab-chronicle" class="tab-content">
+        <h2 class="view-title">The Sovereign Chronicle</h2>
+        <p class="view-desc">
+          The recorded history of your chieftainship, documenting seasonal turn outcomes, harsh winters, divine signs, and blood mutations.
+        </p>
+
+        <div class="card">
+          <div id="chronicle-stream-full" class="log-stream"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- EVENT & DESTINY SINGULARITY MODAL OVERLAY -->
+  <div id="event-modal-overlay">
+    <div class="modal-dialog">
+      <div id="modal-event-tag" class="modal-tag">COSMIC EVENT</div>
+      <div id="modal-event-title" class="modal-title">Event Title</div>
+      <div id="modal-event-body" class="modal-body">Event narrative description...</div>
+      <div id="modal-event-actions" class="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- FLOATING MAP TOOLTIP -->
+  <div id="map-hover-tooltip"></div>
+
+  <script src="map/voronoi.js"></script>
+  <script src="map/world-generator.js"></script>
+  <script src="map/map-renderer.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
